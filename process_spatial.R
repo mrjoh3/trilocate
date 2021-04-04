@@ -39,3 +39,47 @@ l2 <- st_linestring(rbind(le, destPoint(le, 40, vis)))
 
 
 
+
+plot(l1)
+plot(l2, add=T)
+
+
+twrs <- twr %>% filter(FEATURE_ID %in% towers)
+twrs$bear = c(270,0,315)
+
+dest = destPoint(st_coordinates(twrs), twrs$bear, 40000)
+
+
+lines = st_coordinates(twrs) %>%
+  cbind(dest) %>% 
+  as.data.frame() %>% 
+  split(1:nrow(.)) %>%
+  map(., ~ st_linestring(rbind(c(.x$X,.x$Y),c(.x$lon,.x$lat)))) %>%
+  st_as_sfc(crs = 4283)
+
+
+mapview::mapview(lines)
+
+tri <- lines %>%
+  st_transform(3111) %>%
+  st_intersection() %>% 
+  st_as_sf(crs = 3111) %>%
+  mutate(type = st_geometry_type(x)) %>%
+  filter(type == 'POINT') 
+  
+
+# need to draw circle around points
+
+# library(lwgeom)
+# circ <- st_minimum_bounding_circle(st_union(tri))
+
+# replace circ with boundary of tri centroid
+
+cent <- st_convex_hull(st_union(tri)) %>% st_centroid() # convert to gda and reverse geocode
+
+radius <- max(st_distance(tri, cent))
+
+circ2 <- st_buffer(cent, radius) %>%
+  st_transform(4283)
+
+mapview(circ) + mapview(tri) + mapview(lines) + mapview(twrs) 
