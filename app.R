@@ -18,7 +18,8 @@ library(purrr)
 
 library(tmaptools)
 
-towers <- readRDS('towers.rds')
+towers <- readRDS('towers.rds') %>%
+   st_transform(4326)
 
 APP_TITLE <- 'Smoke Locate'
 
@@ -73,7 +74,7 @@ server <- function(input, output, session) {
             completedColor = "#7D4479") %>%
          addScaleBar(position = 'bottomright') %>%
          leaflet.extras::addFullscreenControl() %>%
-         leafem::addMouseCoordinates(epsg = 4283) %>%
+         leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
             baseGroups = c("Default", "Street", "Aerial"),
             overlayGroups = c("Estimate", "Triangulate"),
@@ -173,44 +174,64 @@ server <- function(input, output, session) {
             as.data.frame() %>% 
             split(1:nrow(.)) %>%
             map(., ~ st_linestring(rbind(c(.x$X,.x$Y),c(.x$lon,.x$lat)))) %>%
-            st_as_sfc(crs = 4283)
+            st_as_sfc(crs = 4326)
          
          # get points where lines intersect
          tri <- lines %>%
-            st_transform(3111) %>%
             st_intersection() %>% 
-            st_as_sf(crs = 3111) %>%
-            mutate(type = st_geometry_type(x)) %>%
-            filter(type == 'POINT') #TODO keep these together until after transform to 4283
+            st_as_sf(crs = 4326) %>%
+            mutate(type = st_geometry_type(x))
+         
+         tri_lines <- tri %>%
+            filter(type == 'LINESTRING')
+         
+         tri_points <- tri %>%
+            filter(type == 'POINT') 
          
          # draw circle around points
-         cent <- tri %>%
+         cent <- tri_points %>%
             st_union() %>%
             st_convex_hull() %>% 
             st_centroid() 
-         radius <- max(st_distance(tri, cent))
          
-         circ <- st_buffer(cent, radius * 1.1) %>%
-            st_transform(4283)
+         # determine if some lines do not intersect (TODO: needs work)
+         # need to flash warning when no lines intersect
+         if (nrow(tri_points) < nrow(tri_lines)) {
+            
+            radius <- max(st_distance(twrs, cent)) * 0.005
+            msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+            
+         } else {
+            
+            radius <- max(st_distance(tri_points, cent))
+            msg <- 'All lines intersect.'
+         }
+         
+         
+         circ <- cent %>%
+            st_transform(3111) %>%
+            st_buffer(radius * 1.1) %>%
+            st_transform(4326)
          
          # convert location centre to gda and reverse geocode
          address <<- ''
          try(
             
             address <<- cent %>%
-               st_transform(4283) %>%
-               st_as_sf(crs = 4283) %>%
-               tmaptools::rev_geocode_OSM(projection = 4283)
+               st_as_sf(crs = 4326) %>%
+               tmaptools::rev_geocode_OSM(projection = 4326)
             
          )
          
          if (address != '') {
             
-            coord_lab <- st_coordinates(st_transform(cent, 4283))
+            coord_lab <- st_coordinates(cent)
             
             label <- glue('{address[[1]]$name}<BR>',
-                          "Longitude: {coord_lab[1]}<BR>",
-                          "Latitude: {coord_lab[2]}",)
+                          "Longitude: {round(coord_lab[1], 8)}<BR>",
+                          "Latitude: {round(coord_lab[2], 8)}<BR>",
+                          "Accuracy: {floor(radius)}m<BR>",
+                          "Message: {msg}")
          }
          
          
@@ -219,19 +240,22 @@ server <- function(input, output, session) {
          
          # add lines and circle to map proxy
          leafletProxy('map', session) %>%
-            addPolygons(data = circ, fillColor = 'red', weight = 0.5) %>%
-            addAwesomeMarkers(data = st_transform(cent, 4283),
+            addPolygons(data = circ, group = 'Estimate',
+                        fillColor = 'red', 
+                        weight = 0.5) %>%
+            addAwesomeMarkers(data = cent, group = 'Estimate',
                               icon = fire_icon,
                               popup = label) %>%
-            addPolylines(data = st_as_sf(lines, crs = 4283), group = 'Triangulate',
-                         weight = 0.8,
-                         color = 'darkgrey') %>%
-            addCircleMarkers(data = st_transform(tri, 4283), group = 'Triangulate',
-                             radius = 5,
+            addPolylines(data = tri_lines, group = 'Triangulate',
+                         weight = 1,
+                         color = 'darkred') %>%
+            addCircleMarkers(data = tri_points, group = 'Triangulate',
+                             radius = 10,
                              fillColor = 'green',
                              weight = 0.8,
                              color = 'darkgrey') %>%
-            flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']])
+            flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
+            hideGroup('Triangulate')
          
          
       }
