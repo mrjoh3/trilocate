@@ -8,7 +8,10 @@ library(shinyWidgets)
 library(shinyalert)
 
 library(sf)
+library(geosphere)
 library(leaflet)
+library(leafem)
+library(leaflet.extras)
 library(glue)
 library(dplyr)
 library(purrr)
@@ -52,7 +55,17 @@ server <- function(input, output, session) {
 
       leaflet() %>%
          addTiles() %>%
-         addMarkers(data = towers, layerId = ~ FEATURE_ID)
+         addMarkers(data = towers, layerId = ~ FEATURE_ID) %>%
+         addMeasure(
+            position = "bottomleft",
+            primaryLengthUnit = "meters",
+            primaryAreaUnit = "sqmeters",
+            activeColor = "#3D535D",
+            completedColor = "#7D4479") %>%
+         addScaleBar(position = 'bottomright') %>%
+         leaflet.extras::addFullscreenControl() %>%
+         leafem::addMouseCoordinates(epsg = 4283) 
+         
       
    })
    
