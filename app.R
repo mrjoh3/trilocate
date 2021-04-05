@@ -196,6 +196,7 @@ server <- function(input, output, session) {
          
          # determine if some lines do not intersect (TODO: needs work)
          # need to flash warning when no lines intersect
+         # need to account for 2 lines and only on intersect (currently assumes perfect accuracy)
          if (nrow(tri_points) < nrow(tri_lines)) {
             
             radius <- max(st_distance(twrs, cent)) * 0.005
