@@ -199,6 +199,7 @@ server <- function(input, output, session) {
          if (nrow(tri_points) < nrow(tri_lines)) {
             
             radius <- max(st_distance(twrs, cent)) * 0.005
+            # TODO: make msg dark red
             msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
             
          } else {
