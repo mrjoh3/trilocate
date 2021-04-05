@@ -61,7 +61,9 @@ server <- function(input, output, session) {
    output$map <- renderLeaflet({
 
       leaflet() %>%
-         addTiles() %>%
+         addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
+         addTiles(group = 'Streets') %>%
+         addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
          addMarkers(data = towers, layerId = ~ FEATURE_ID) %>%
          addMeasure(
             position = "bottomleft",
@@ -71,7 +73,12 @@ server <- function(input, output, session) {
             completedColor = "#7D4479") %>%
          addScaleBar(position = 'bottomright') %>%
          leaflet.extras::addFullscreenControl() %>%
-         leafem::addMouseCoordinates(epsg = 4283) 
+         leafem::addMouseCoordinates(epsg = 4283) %>%
+         addLayersControl(
+            baseGroups = c("Default", "Street", "Aerial"),
+            overlayGroups = c("Estimate", "Triangulate"),
+            options = layersControlOptions(collapsed = FALSE)
+         )
          
       
    })
@@ -174,7 +181,7 @@ server <- function(input, output, session) {
             st_intersection() %>% 
             st_as_sf(crs = 3111) %>%
             mutate(type = st_geometry_type(x)) %>%
-            filter(type == 'POINT') 
+            filter(type == 'POINT') #TODO keep these together until after transform to 4283
          
          # draw circle around points
          cent <- tri %>%
@@ -216,6 +223,14 @@ server <- function(input, output, session) {
             addAwesomeMarkers(data = st_transform(cent, 4283),
                               icon = fire_icon,
                               popup = label) %>%
+            addPolylines(data = st_as_sf(lines, crs = 4283), group = 'Triangulate',
+                         weight = 0.8,
+                         color = 'darkgrey') %>%
+            addCircleMarkers(data = st_transform(tri, 4283), group = 'Triangulate',
+                             radius = 5,
+                             fillColor = 'green',
+                             weight = 0.8,
+                             color = 'darkgrey') %>%
             flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']])
          
          
