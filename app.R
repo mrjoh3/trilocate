@@ -112,7 +112,6 @@ server <- function(input, output, session) {
 
       leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
-         addWMSTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', layers = 'CARTO_OVERLAY_VG', group = 'Vicmap') %>% # TODO: fix
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
          addPolygons(data = ba,
@@ -340,7 +339,7 @@ server <- function(input, output, session) {
                              weight = 0.8,
                              color = 'darkgrey') %>%
             flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
-            hideGroup('Triangulate')
+            showGroup('Estimate')
          
          
       }
