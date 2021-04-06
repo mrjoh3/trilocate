@@ -6,6 +6,7 @@ library(shinydashboard)
 library(shinythemes)
 library(shinyWidgets)
 library(shinyalert)
+library(shinyjs)
 
 library(sf)
 library(geosphere)
@@ -80,10 +81,11 @@ ui <- shinyUI(fluidPage(
       header = NULL,
       useShinydashboard(),
       shinyalert::useShinyalert(),
+      useShinyjs(),
 
             # Application title
       titlePanel(withTags(
-         div(APP_TITLE, icon('fire', class = 'orange'),
+         div(icon('fire', class = 'orange'), APP_TITLE, 
              div(class = 'pull-right',
                  a(href = 'https://github.com/mrjoh3/trilocate',
                    icon('github'))), hr() )
@@ -188,7 +190,7 @@ server <- function(input, output, session) {
          
          if (length(selected$towers) == 0) {
             
-            column(12, h3('Please Select 2 or more Towers'))
+            column(12, h3('To begin click on 2 or more Towers'))
             
          } else {
             
@@ -335,6 +337,9 @@ server <- function(input, output, session) {
                              color = 'darkgrey') %>%
             flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
             showGroup('Estimate')
+         
+         # pan page back to map (effect only noticeable on mobile)
+         runjs('document.getElementById("map").scrollIntoView();')
          
          
       }
