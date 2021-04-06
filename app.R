@@ -83,7 +83,7 @@ ui <- shinyUI(fluidPage(
 
             # Application title
       titlePanel(withTags(
-         div(APP_TITLE,
+         div(APP_TITLE, icon('fire', class = 'orange'),
              div(class = 'pull-right',
                  a(href = 'https://github.com/mrjoh3/trilocate',
                    icon('github'))), hr() )
