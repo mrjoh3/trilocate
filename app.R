@@ -25,7 +25,7 @@ APP_TITLE <- 'Smoke Locate'
 towers <- readRDS('towers.rds') %>%
    st_transform(4326)
 
-# get current situation
+# get current situation 
 statewide <- st_read('https://www.emergency.vic.gov.au/public/osom-geojson.json', stringsAsFactors = FALSE) %>% 
    st_transform(4326) %>%
    mutate(sizeFmt = as.character(sizeFmt),
@@ -80,11 +80,17 @@ ui <- shinyUI(fluidPage(
       header = NULL,
       useShinydashboard(),
       shinyalert::useShinyalert(),
-      tags$div(style = 'text-align: center;',
-               h1(APP_TITLE, icon('fire', class = 'orange')),
-               #h5(textOutput('subtitle')),
-               tags$hr()
+
+            # Application title
+      titlePanel(withTags(
+         div(APP_TITLE,
+             div(class = 'pull-right',
+                 a(href = 'https://github.com/mrjoh3/trilocate',
+                   icon('github'))), hr() )
+      ), 
+      windowTitle = APP_TITLE
       ),
+      
       includeCSS('www/css/styles.css'),
       fluidRow(
          leafletOutput('map', height = 450),
@@ -145,7 +151,7 @@ server <- function(input, output, session) {
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
                            group = 'Current Fires') %>%
-         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID,
+         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID, label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            icon = all_icons['towers']) %>%
          addMeasure(
             position = "bottomleft",
@@ -166,27 +172,16 @@ server <- function(input, output, session) {
       
    })
    
-   # observe({
-   #    
-   #    proxy <- leafletProxy("map")
-   #    
-   # })
    
    observeEvent(input$map_marker_click, {
 
       click <- input$map_marker_click
       
       isolate(selected$towers <- c(selected$towers, click$id))
-      
-      #assign('towers', selected$towers, envir = .GlobalEnv)
+
    })
    
    observe({
-      
-      # output$towers <- renderUI({
-      #    h3(glue('seems to work {paste(selected$towers, collapse = ", ")}'))
-      # })
-      
       
       # construct UI
       output$towers <- renderUI({
