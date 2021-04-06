@@ -18,11 +18,60 @@ library(purrr)
 
 library(tmaptools)
 
-towers <- readRDS('towers.rds') %>%
-   st_transform(4326)
 
 APP_TITLE <- 'Smoke Locate'
 
+# import all towers (TODO: find a dynamic import that updates)
+towers <- readRDS('towers.rds') %>%
+   st_transform(4326)
+
+# get current situation
+statewide <- st_read('https://www.emergency.vic.gov.au/public/osom-geojson.json', stringsAsFactors = FALSE) %>% 
+   st_transform(4326) %>%
+   mutate(sizeFmt = as.character(sizeFmt),
+          sizeFmt = ifelse(sizeFmt == 'character(0)', '', sizeFmt)) %>%
+   filter(!is.na(st_is_valid(.))) %>%
+   st_make_valid() %>%
+   select(sourceId,
+          feedType,
+          sourceTitle,
+          cap,
+          category1, 
+          category2,
+          status,
+          location,
+          incidentFeatures,
+          webHeadline,
+          url,
+          resources, 
+          sizeFmt)
+
+# burn area
+ba <- statewide %>% 
+   filter(feedType == 'burn-area') %>%
+   mutate(area = st_area(.),
+          area = round(units::set_units(area, ha), 2),
+          type = st_geometry_type(.)) %>%
+   filter(!grepl('LINE', type)) %>%
+   select(status, location, area) %>%
+   st_cast('MULTIPOLYGON')
+
+# planned burn
+pb <- statewide %>% 
+   filter(category1 == 'Planned Burn') %>%
+   select(status, location, category = category2, category1, resources, size = sizeFmt)
+
+# fire incident
+fi <- statewide %>% 
+   filter(category1 == 'Fire') %>%
+   select(status, location, category = category2, category1, resources, size = sizeFmt)
+
+# map icons
+all_icons <- awesomeIconList(
+   Fire = makeAwesomeIcon(icon= 'fire', markerColor = 'darkred', iconColor = '#FFFFFF', library = "fa"),
+   `Planned Burn` = makeAwesomeIcon(icon= 'fire', markerColor = 'purple', iconColor = '#FFFFFF', library = "fa"),
+   towers = makeAwesomeIcon(icon= 'binoculars', markerColor = 'green', iconColor = '#FFFFFF', library = "fa")
+)
 
 ui <- shinyUI(fluidPage(
       title = APP_TITLE,
@@ -63,9 +112,42 @@ server <- function(input, output, session) {
 
       leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
-         addTiles(group = 'Streets') %>%
+         addWMSTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', layers = 'CARTO_OVERLAY_VG', group = 'Vicmap') %>% # TODO: fix
+         addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
-         addMarkers(data = towers, layerId = ~ FEATURE_ID) %>%
+         addPolygons(data = ba,
+                     weight = 1,
+                     color = 'red',
+                     fillColor = 'black',
+                     popup = ~paste(sep = '<br>',
+                                    glue('<strong>Status: {status}</strong>'),
+                                    glue('Location: {location}'),
+                                    glue('Burnt Area (Ha): {area}')),
+                     group = 'Burnt Area') %>%
+         addAwesomeMarkers(data = pb %>% st_cast("POINT"), 
+                           icon = ~all_icons[category1],
+                           popup = ~paste(sep = '<br>',
+                                          glue('<strong>{status}</strong>'),
+                                          ifelse(category1 == category,
+                                                 glue('Category: {category1}'),
+                                                 glue('Category: {category1} - {category}')),
+                                          glue('Location: {location}'),
+                                          glue('Resources: {resources}'),
+                                          glue('Size: {size}')),
+                           group = 'Planned Burns') %>%
+         addAwesomeMarkers(data = fi %>% st_cast("POINT"), 
+                           icon = ~all_icons[category1],
+                           popup = ~paste(sep = '<br>',
+                                          glue('<strong>{status}</strong>'),
+                                          ifelse(category1 == category,
+                                                 glue('Category: {category1}'),
+                                                 glue('Category: {category1} - {category}')),
+                                          glue('Location: {location}'),
+                                          glue('Resources: {resources}'),
+                                          glue('Size: {size}')),
+                           group = 'Current Fires') %>%
+         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID,
+                           icon = all_icons['towers']) %>%
          addMeasure(
             position = "bottomleft",
             primaryLengthUnit = "meters",
@@ -76,10 +158,11 @@ server <- function(input, output, session) {
          leaflet.extras::addFullscreenControl() %>%
          leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
-            baseGroups = c("Default", "Street", "Aerial"),
-            overlayGroups = c("Estimate", "Triangulate"),
+            baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
+            overlayGroups = c("Estimate", "Triangulate", "Planned Burns", "Current Fires", "Burnt Area"),
             options = layersControlOptions(collapsed = FALSE)
-         )
+         ) %>%
+         hideGroup(c("Estimate", "Triangulate", "Planned Burns", "Current Fires", "Burnt Area"))
          
       
    })
