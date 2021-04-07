@@ -203,7 +203,7 @@ server <- function(input, output, session) {
                column(12 / length(selected$towers),
                       h3(name),
                       numericInput(glue('bearing_{id}'), label = 'Bearing', value = NULL),
-                      sliderInput(glue('vis_{id}'), label = 'Visibility (km)', min = 0, max = 50, step = 5, value = 50), 
+                      sliderInput(glue('vis_{id}'), label = 'Visibility (km)', min = 0, max = 100, step = 10, value = 50), 
                       tags$hr()
                       )
                
@@ -224,8 +224,9 @@ server <- function(input, output, session) {
       
       if (length(selected$towers) < 2) {
          
-         shinyalert("Error",
-                    "You need to select more than one tower before a location can be estimated")
+         shinyalert("ERROR",
+                    "You need to select more than one tower before a location can be estimated",
+                    type = 'error')
          
          ##TODO:  change this to estimate location based on one tower with bearing and distance
          
@@ -276,71 +277,101 @@ server <- function(input, output, session) {
          # determine if some lines do not intersect (TODO: needs work)
          # need to flash warning when no lines intersect
          # need to account for 2 lines and only on intersect (currently assumes perfect accuracy)
-         if (nrow(tri_points) < nrow(tri_lines)) {
+         if (nrow(tri_points) == 0) {
             
-            radius <- max(st_distance(twrs, cent)) * 0.005
-            # TODO: make msg dark red
-            msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+            ## NO INTERSECTION FOUND 
+            
+            bb_lines <- st_bbox(lines)
+            
+            # add lines and circle to map proxy
+            leafletProxy('map', session) %>%
+               addPolylines(data = st_as_sf(lines, crs = 4326), group = 'Triangulate',
+                            weight = 1.2,
+                            color = 'darkred') %>%
+               flyToBounds(bb_lines[['xmin']], bb_lines[['ymin']], bb_lines[['xmax']], bb_lines[['ymax']]) %>%
+               showGroup('Triangulate')
+            
+            # pan page back to map (effect only noticeable on mobile)
+            runjs('document.getElementById("map").scrollIntoView();')
+            
+            shinyalert("WARNING",
+                       "The supplied towers and bearings do not intersect. Towers may be observing multiple incidents, or the visibility of a tower may need to be extended. Use the red lines on the map as a guide.",
+                       type = 'warning')
+            
             
          } else {
             
-            radius <- max(st_distance(tri_points, cent))
-            msg <- 'All lines intersect.'
+            ## INTERSECTION SUCCESSFULL
+            
+            if (nrow(tri_points) < nrow(tri_lines)) {
+               
+               radius <- max(st_distance(twrs, cent)) * 0.005
+               # TODO: make msg dark red
+               msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+               
+            } else {
+               
+               radius <- max(st_distance(tri_points, cent))
+               msg <- 'All lines intersect.'
+            }
+            
+            
+            circ <- cent %>%
+               st_transform(3111) %>%
+               st_buffer(radius * 1.1) %>%
+               st_transform(4326)
+            
+            # convert location centre to gda and reverse geocode
+            address <<- ''
+            try(
+               
+               address <<- cent %>%
+                  st_as_sf(crs = 4326) %>%
+                  tmaptools::rev_geocode_OSM(projection = 4326)
+               
+            )
+            
+            if (address != '') {
+               
+               coord_lab <- st_coordinates(cent)
+               
+               label <- glue('{address[[1]]$name}<BR>',
+                             "Longitude: {round(coord_lab[1], 8)}<BR>",
+                             "Latitude: {round(coord_lab[2], 8)}<BR>",
+                             "Accuracy: {floor(radius)}m<BR>",
+                             "Message: {msg}")
+            }
+            
+            
+            fire_icon <- makeAwesomeIcon(icon= 'fire', markerColor = 'red', iconColor = '#FFFFFF', library = "fa")
+            bb <- round(st_bbox(circ), 4)
+            
+            # add lines and circle to map proxy
+            leafletProxy('map', session) %>%
+               addPolygons(data = circ, group = 'Estimate',
+                           fillColor = 'red', 
+                           weight = 0.5) %>%
+               addAwesomeMarkers(data = cent, group = 'Estimate',
+                                 icon = fire_icon,
+                                 popup = label) %>%
+               addPolylines(data = tri_lines, group = 'Triangulate',
+                            weight = 1.2,
+                            color = 'darkred') %>%
+               addCircleMarkers(data = tri_points, group = 'Triangulate',
+                                radius = 10,
+                                fillColor = 'green',
+                                weight = 0.8,
+                                color = 'darkgrey') %>%
+               flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
+               showGroup('Estimate')
+            
+            # pan page back to map (effect only noticeable on mobile)
+            runjs('document.getElementById("map").scrollIntoView();')
+            
+            
+            
+            
          }
-         
-         
-         circ <- cent %>%
-            st_transform(3111) %>%
-            st_buffer(radius * 1.1) %>%
-            st_transform(4326)
-         
-         # convert location centre to gda and reverse geocode
-         address <<- ''
-         try(
-            
-            address <<- cent %>%
-               st_as_sf(crs = 4326) %>%
-               tmaptools::rev_geocode_OSM(projection = 4326)
-            
-         )
-         
-         if (address != '') {
-            
-            coord_lab <- st_coordinates(cent)
-            
-            label <- glue('{address[[1]]$name}<BR>',
-                          "Longitude: {round(coord_lab[1], 8)}<BR>",
-                          "Latitude: {round(coord_lab[2], 8)}<BR>",
-                          "Accuracy: {floor(radius)}m<BR>",
-                          "Message: {msg}")
-         }
-         
-         
-         fire_icon <- makeAwesomeIcon(icon= 'fire', markerColor = 'red', iconColor = '#FFFFFF', library = "fa")
-         bb <- round(st_bbox(circ), 4)
-         
-         # add lines and circle to map proxy
-         leafletProxy('map', session) %>%
-            addPolygons(data = circ, group = 'Estimate',
-                        fillColor = 'red', 
-                        weight = 0.5) %>%
-            addAwesomeMarkers(data = cent, group = 'Estimate',
-                              icon = fire_icon,
-                              popup = label) %>%
-            addPolylines(data = tri_lines, group = 'Triangulate',
-                         weight = 1,
-                         color = 'darkred') %>%
-            addCircleMarkers(data = tri_points, group = 'Triangulate',
-                             radius = 10,
-                             fillColor = 'green',
-                             weight = 0.8,
-                             color = 'darkgrey') %>%
-            flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
-            showGroup('Estimate')
-         
-         # pan page back to map (effect only noticeable on mobile)
-         runjs('document.getElementById("map").scrollIntoView();')
-         
          
       }
       
