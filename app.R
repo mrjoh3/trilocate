@@ -303,11 +303,17 @@ server <- function(input, output, session) {
             
             ## INTERSECTION SUCCESSFULL
             
-            if (nrow(tri_points) < nrow(tri_lines)) {
+            if (nrow(tri_points) < nrow(tri_lines)) { # TODO: examine different intersection patterns. Pattern below may not always hold
                
                radius <- max(st_distance(twrs, cent)) * 0.005
                # TODO: make msg dark red
-               msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+               
+               if (nrow(tri_lines) == 2 & nrow(tri_points) == 1) {
+                  msg <- 'Only 2 towers were selected. Accuracy reflects distance from towers to intersecting point(s)'
+               } else {
+                  msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+               }
+               
                
             } else {
                
