@@ -5,10 +5,11 @@
 library(dplyr)
 library(sf)
 library(stringr)
+library(VicmapR)
 
-cfa_tfb <- st_read('shp/cfa_tfb_district.shp', stringsAsFactors = FALSE) 
+#cfa_tfb <- st_read('shp/cfa_tfb_district.shp', stringsAsFactors = FALSE) 
 
-
+tfb <- vicmap_query(layer = "datavic:VMADMIN_CFA_TFB_DISTRICT") %>% collect()
 
   
 
@@ -17,11 +18,12 @@ cfa_tfb <- st_read('shp/cfa_tfb_district.shp', stringsAsFactors = FALSE)
 twr <- st_read('shp/geomark_point.shp', stringsAsFactors = FALSE) %>%
   filter(STATE == 'VIC',
          FEATSUBTYP == 'fire lookout') %>%
-  st_cast('POINT')
+  st_cast('POINT') %>%
+  st_join(select(tfb, TFB_DISTRICT))
 
 
 saveRDS(twr, 'towers.rds')
-
+saveRDS(tfb, 'tfb.rds')
 
 
 # create line using point and bearing

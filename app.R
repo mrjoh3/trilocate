@@ -26,6 +26,9 @@ APP_TITLE <- 'Smoke Locate'
 towers <- readRDS('towers.rds') %>%
    st_transform(4326)
 
+tfb <- readRDS('tfb.rds') %>%
+   st_transform(4326)
+
 # get current situation 
 statewide <- st_read('https://www.emergency.vic.gov.au/public/osom-geojson.json', stringsAsFactors = FALSE) %>% 
    st_transform(4326) %>%
@@ -107,7 +110,32 @@ ui <- shinyUI(fluidPage(
                           style = 'material-flat',
                           block = TRUE,
                           color = 'warning',
-                          size = 'lg'))
+                          size = 'lg')),
+      fluidRow(column(2),
+               column(4,
+                      h2('Instructions'),
+                      h3('Step 1:'),
+                        p('Locate the towers that have observed a smoke column. ',
+                          'You can zoom into the area or use the search ',
+                          icon('search'), ' option in the top left of the map. ',
+                          'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it.'
+                          ),
+                      h3('Step 2:'),
+                           p('Click on ',
+                             tags$strong('ALL'),
+                             'of the towers for which you have a known bearing.'),
+                        h3('Step 3:'),
+                           p('Enter the bearing of the smoke sighting for each tower')
+                      ),
+               column(4,
+                      h2('About'),
+                      p('In Victoria on a hot, dry summer day fire can spread at up to 10 km/h in forest and up to 20 km/h in grassland. ',
+                        'The timeliness of the initial response to a fire is critical to containment and reducing the severity and impact of the fire. '),
+                      p('Victoria has a network of ', nrow(towers), 'fire watch towers. When smoke is sighted these towers use a triangulation method to narrow in on the exact location. ',
+                        'This application is intended to replicate and simplify this triangulation process, while at the same time incorporate modern reverse geocoding ',
+                        'capabilities that can convert a location into an address.')
+                      ),
+               column(2))
   )
 )
 
@@ -122,6 +150,13 @@ server <- function(input, output, session) {
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
+         addPolygons(data = tfb, group = 'TFB Districts', layerId = ~ TFB_DISTRICT, 
+                     weight = 0.8,
+                     color = '#980c1d',
+                     fillColor = 'lightgrey',
+                     fillOpacity = 0.3,
+                     label = ~ TFB_DISTRICT
+                     ) %>%
          addPolygons(data = ba,
                      weight = 1,
                      color = 'red',
@@ -170,13 +205,15 @@ server <- function(input, output, session) {
          leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
-            overlayGroups = c("Estimate", "Triangulate", "Planned Burns", "Current Fires", "Burnt Area"),
+            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area"),
             options = layersControlOptions(collapsed = FALSE)
          ) %>%
-         hideGroup(c("Estimate", "Triangulate", "Planned Burns", "Current Fires", "Burnt Area"))
+         hideGroup(c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area"))
          
       
    })
+   
+   proxy_map <- leafletProxy('map', session)
    
    
    observeEvent(input$map_marker_click, {
@@ -185,6 +222,21 @@ server <- function(input, output, session) {
       
       isolate(selected$towers <- c(selected$towers, click$id))
 
+   })
+   
+   observeEvent(input$map_shape_click, {
+      
+      shp_click <- input$map_shape_click
+      if (shp_click$group == "TFB Districts") {
+         
+         bb_shp <- tfb %>% filter(TFB_DISTRICT == shp_click$id) %>% st_bbox()
+         
+         proxy_map %>%
+            flyToBounds(bb_shp[['xmin']], bb_shp[['ymin']], bb_shp[['xmax']], bb_shp[['ymax']]) 
+         
+      }
+
+         
    })
    
    observe({
@@ -288,7 +340,7 @@ server <- function(input, output, session) {
             bb_lines <- st_bbox(lines)
             
             # add lines and circle to map proxy
-            leafletProxy('map', session) %>%
+            proxy_map %>%
                addPolylines(data = st_as_sf(lines, crs = 4326), group = 'Triangulate',
                             weight = 1.2,
                             color = 'darkred') %>%
