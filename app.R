@@ -153,8 +153,12 @@ server <- function(input, output, session) {
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
                            group = 'Current Fires') %>%
-         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID, label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
-                           icon = all_icons['towers']) %>%
+         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID, 
+                           label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
+                           popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
+                           icon = all_icons['towers'],
+                           group = 'Towers') %>%
+         leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
          addMeasure(
             position = "bottomleft",
             primaryLengthUnit = "meters",
