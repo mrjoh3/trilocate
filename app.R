@@ -24,7 +24,10 @@ APP_TITLE <- 'Smoke Locate'
 
 # import all towers (TODO: find a dynamic import that updates)
 towers <- readRDS('towers.rds') %>%
-   st_transform(4326)
+   st_transform(4326) %>%
+   select(FEATSUBTYP, 
+          FEATURE_ID, 
+          NAME_LABEL)
 
 tfb <- readRDS('tfb.rds') %>%
    st_transform(4326)
@@ -72,9 +75,10 @@ fi <- statewide %>%
 
 # map icons
 all_icons <- awesomeIconList(
-   Fire = makeAwesomeIcon(icon= 'fire', markerColor = 'darkred', iconColor = '#FFFFFF', library = "fa"),
-   `Planned Burn` = makeAwesomeIcon(icon= 'fire', markerColor = 'purple', iconColor = '#FFFFFF', library = "fa"),
-   towers = makeAwesomeIcon(icon= 'binoculars', markerColor = 'green', iconColor = '#FFFFFF', library = "fa")
+   'Fire' = makeAwesomeIcon(icon = 'fire', markerColor = 'darkred', iconColor = '#FFFFFF', library = "fa"),
+   `Planned Burn` = makeAwesomeIcon(icon = 'fire', markerColor = 'purple', iconColor = '#FFFFFF', library = "fa"),
+   'fire lookout' = makeAwesomeIcon(icon = 'binoculars', markerColor = 'green', iconColor = '#FFFFFF', library = "fa"),
+   'mobile location' = makeAwesomeIcon(icon = 'truck', markerColor = 'blue', iconColor = '#FFFFFF', library = "fa")
 )
 
 ui <- shinyUI(fluidPage(
@@ -118,7 +122,8 @@ ui <- shinyUI(fluidPage(
                         p('Locate the towers that have observed a smoke column. ',
                           'You can zoom into the area or use the search ',
                           icon('search'), ' option in the top left of the map. ',
-                          'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it.'
+                          'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it. ',
+                          'If an observation is not from a tower zoom into the area and click on the map to create a temporary location.'
                           ),
                       h3('Step 2:'),
                            p('Click on ',
@@ -143,6 +148,27 @@ ui <- shinyUI(fluidPage(
 server <- function(input, output, session) {
    
    selected <- reactiveValues(towers = c())
+   
+   map_towers <- reactive({
+      click <- input$map_click
+
+      if (!is.null(click)){
+         
+         id <- as.integer(Sys.time())
+         isolate(selected$towers <- c(selected$towers, id))
+         
+         st_sf(FEATSUBTYP = 'mobile location', 
+               FEATURE_ID = id, 
+               NAME_LABEL = 'New Location', 
+               geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
+            rbind(towers, .)
+      } else {
+         towers
+      }
+      
+      
+      
+   })
    
    output$map <- renderLeaflet({
 
@@ -188,10 +214,10 @@ server <- function(input, output, session) {
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
                            group = 'Current Fires') %>%
-         addAwesomeMarkers(data = towers, layerId = ~ FEATURE_ID, 
+         addAwesomeMarkers(data = map_towers(), layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
                            label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
-                           icon = all_icons['towers'],
+                           icon = ~ all_icons[FEATSUBTYP],
                            group = 'Towers') %>%
          leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
          addMeasure(
@@ -253,7 +279,7 @@ server <- function(input, output, session) {
             tagList(lapply(1:length(selected$towers), function(n){
                
                id <- selected$towers[n]
-               r <- filter(towers, FEATURE_ID == id)
+               r <- filter(map_towers(), FEATURE_ID == id)
                name <- r[['NAME_LABEL']]
                
                column(12 / length(selected$towers),
@@ -291,7 +317,7 @@ server <- function(input, output, session) {
          bearings <<- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
          visibility <<- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
          
-         twrs <<- towers %>% 
+         twrs <<- map_towers() %>% 
             filter(FEATURE_ID %in% selected$towers) %>%
             left_join(tibble(FEATURE_ID = selected$towers,
                              bear = bearings,
