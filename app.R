@@ -122,9 +122,9 @@ ui <- shinyUI(fluidPage(
                         p('Locate the towers that have observed a smoke column. ',
                           'You can zoom into the area or use the search ',
                           icon('search'), ' option in the top left of the map. ',
-                          'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it. ',
-                          'If an observation is not from a tower zoom into the area and click on the map to create a temporary location.'
+                          'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it. '
                           ),
+                        p('If an observation is not from a tower zoom into the area and click on the map to create a temporary location.'),
                       h3('Step 2:'),
                            p('Click on ',
                              tags$strong('ALL'),
