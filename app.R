@@ -151,8 +151,11 @@ server <- function(input, output, session) {
    
    map_towers <- reactive({
       click <- input$map_click
+      sc <<- input$map_shape_click
 
-      if (!is.null(click)){
+      assign('mclk', click, .GlobalEnv)
+      
+      if (!is.null(click) & is.null(sc$group)){
          
          id <- as.integer(Sys.time())
          isolate(selected$towers <- c(selected$towers, id))
@@ -253,7 +256,7 @@ server <- function(input, output, session) {
    observeEvent(input$map_shape_click, {
       
       shp_click <- input$map_shape_click
-      if (shp_click$group == "TFB Districts") {
+      if (!is.null(shp_click$group) & shp_click$group == "TFB Districts") {
          
          bb_shp <- tfb %>% filter(TFB_DISTRICT == shp_click$id) %>% st_bbox()
          
