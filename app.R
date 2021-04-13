@@ -148,11 +148,13 @@ ui <- shinyUI(fluidPage(
 server <- function(input, output, session) {
    
    selected <- reactiveValues(towers = c())
+   tow <- reactiveValues(ers = towers)
    
-   map_towers <- reactive({
+   observeEvent(input$map_click, {
+      
       click <- input$map_click
       sc <<- input$map_shape_click
-
+      
       assign('mclk', click, .GlobalEnv)
       
       if (!is.null(click) & is.null(sc$group)){
@@ -160,23 +162,25 @@ server <- function(input, output, session) {
          id <- as.integer(Sys.time())
          isolate(selected$towers <- c(selected$towers, id))
          
-         st_sf(FEATSUBTYP = 'mobile location', 
-               FEATURE_ID = id, 
-               NAME_LABEL = 'New Location', 
-               geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
-            rbind(towers, .)
+         isolate(tow$ers <- st_sf(FEATSUBTYP = 'mobile location', 
+                                  FEATURE_ID = id, 
+                                  NAME_LABEL = 'New Location', 
+                                  geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
+                    rbind(tow$ers, .))
+         
       } else {
          towers
       }
       
-      
-      
    })
+   
+   
    
    output$map <- renderLeaflet({
 
       leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
+         addTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', group = 'Vicmap') %>%
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
          addPolygons(data = tfb, group = 'TFB Districts', layerId = ~ TFB_DISTRICT, 
@@ -217,7 +221,7 @@ server <- function(input, output, session) {
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
                            group = 'Current Fires') %>%
-         addAwesomeMarkers(data = map_towers(), layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
+         addAwesomeMarkers(data = tow$ers, layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
                            label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            icon = ~ all_icons[FEATSUBTYP],
@@ -282,7 +286,7 @@ server <- function(input, output, session) {
             tagList(lapply(1:length(selected$towers), function(n){
                
                id <- selected$towers[n]
-               r <- filter(map_towers(), FEATURE_ID == id)
+               r <- filter(tow$ers, FEATURE_ID == id)
                name <- r[['NAME_LABEL']]
                
                column(12 / length(selected$towers),
@@ -320,7 +324,7 @@ server <- function(input, output, session) {
          bearings <<- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
          visibility <<- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
          
-         twrs <<- map_towers() %>% 
+         twrs <<- tow$ers %>% 
             filter(FEATURE_ID %in% selected$towers) %>%
             left_join(tibble(FEATURE_ID = selected$towers,
                              bear = bearings,
