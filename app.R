@@ -147,7 +147,8 @@ ui <- shinyUI(fluidPage(
 
 server <- function(input, output, session) {
    
-   selected <- reactiveValues(towers = c())
+   selected <- reactiveValues(towers = c(),
+                              inc_bearings = tibble())
    tow <- reactiveValues(ers = towers)
    
    observeEvent(input$map_click, {
@@ -238,10 +239,10 @@ server <- function(input, output, session) {
          leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
-            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area"),
+            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area", "Incident Bearings"),
             options = layersControlOptions(collapsed = FALSE)
          ) %>%
-         hideGroup(c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area"))
+         hideGroup(c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area", "Incident Bearings"))
          
       
    })
@@ -251,9 +252,28 @@ server <- function(input, output, session) {
    
    observeEvent(input$map_marker_click, {
 
-      click <- input$map_marker_click
+      mclk <- input$map_marker_click
       
-      isolate(selected$towers <- c(selected$towers, click$id))
+      isolate(selected$towers <- c(selected$towers, mclk$id))
+      
+      # calculate incident bearings
+      bears <- statewide %>%
+         filter(category1 %in% c('Fire', 'Planned Burn'),
+                st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = 4326), dist = 50000, sparse = FALSE)) 
+         
+      bearing_df <- tibble(tower_id = mclk$id,
+                           tower_name = filter(towers, FEATURE_ID == mclk$id) %>% pull(NAME_LABEL),
+                           tower_X = mclk$lng,
+                           tower_Y = mclk$lat,
+                           sourceId = bears$sourceId,
+                           sourceTitle = bears$sourceTitle,
+                           location = bears$location,
+                           bearing = bearing(c(mclk$lng, mclk$lat), st_coordinates(bears)[,1:2])) %>%
+         mutate(bearing = ifelse(bearing < 0, 360 + bearing, bearing),
+                bearing = round(bearing, 4)) %>%
+         cbind(st_coordinates(bears))
+      
+      isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
 
    })
    
@@ -363,6 +383,15 @@ server <- function(input, output, session) {
             st_convex_hull() %>% 
             st_centroid() 
          
+         
+         # create lines for incident bearings
+         inc_bearings_lines <<- selected$inc_bearings %>% 
+            split(1:nrow(.)) %>%
+            map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
+            st_as_sfc(crs = 4326) %>%
+            st_sf() %>%
+            cbind(selected$inc_bearings)
+         
          # determine if some lines do not intersect (TODO: needs work)
          # need to flash warning when no lines intersect
          # need to account for 2 lines and only on intersect (currently assumes perfect accuracy)
@@ -452,6 +481,12 @@ server <- function(input, output, session) {
                addPolylines(data = tri_lines, group = 'Triangulate',
                             weight = 1.2,
                             color = 'darkred') %>%
+               addPolylines(data = inc_bearings_lines, group = "Incident Bearings",
+                            weight = 1,
+                            color = 'orange',
+                            popup = ~ glue('From: {tower_name}<br>',
+                                           'To: {location}<br>',
+                                           'Bearing: {bearing}')) %>%
                addCircleMarkers(data = tri_points, group = 'Triangulate',
                                 radius = 10,
                                 fillColor = 'green',
