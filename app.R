@@ -155,24 +155,28 @@ server <- function(input, output, session) {
    
    observeEvent(input$map_click, {
       
-      click <- input$map_click
-      sc <<- input$map_shape_click
-      
-      assign('mclk', click, .GlobalEnv)
-      
-      if (!is.null(click) & is.null(sc$group)){
+      if (input$add_obs) {
          
-         id <- as.integer(Sys.time())
-         isolate(selected$towers <- c(selected$towers, id))
+         click <- input$map_click
+         sc <<- input$map_shape_click
          
-         isolate(tow$ers <- st_sf(FEATSUBTYP = 'mobile location', 
-                                  FEATURE_ID = id, 
-                                  NAME_LABEL = 'New Location', 
-                                  geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
-                    rbind(tow$ers, .))
+         assign('mclk', click, .GlobalEnv)
          
-      } else {
-         towers
+         if (!is.null(click) & is.null(sc$group)){
+            
+            id <- as.integer(Sys.time())
+            isolate(selected$towers <- c(selected$towers, id))
+            
+            isolate(tow$ers <- st_sf(FEATSUBTYP = 'mobile location', 
+                                     FEATURE_ID = id, 
+                                     NAME_LABEL = 'New Location', 
+                                     geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
+                       rbind(tow$ers, .))
+            
+         } else {
+            towers
+         }
+         
       }
       
    })
