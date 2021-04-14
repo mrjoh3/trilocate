@@ -511,6 +511,7 @@ server <- function(input, output, session) {
          
       }
       
+      updateMaterialSwitch(session, 'add_obs', value = FALSE)
       
    })
    
