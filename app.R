@@ -63,15 +63,11 @@ ba <- statewide %>%
    select(status, location, area) %>%
    st_cast('MULTIPOLYGON')
 
-# planned burn
-pb <- statewide %>% 
-   filter(category1 == 'Planned Burn') %>%
-   select(status, location, category = category2, category1, resources, size = sizeFmt)
+# current incidents and planned burns
+current_incidents <- statewide %>% 
+   filter(category1 %in% c('Fire', 'Planned Burn')) %>%
+   select(sourceId, sourceTitle, status, location, category = category2, category1, resources, size = sizeFmt)
 
-# fire incident
-fi <- statewide %>% 
-   filter(category1 == 'Fire') %>%
-   select(status, location, category = category2, category1, resources, size = sizeFmt)
 
 # map icons
 all_icons <- awesomeIconList(
