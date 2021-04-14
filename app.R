@@ -386,12 +386,23 @@ server <- function(input, output, session) {
          
          
          # create lines for incident bearings
-         inc_bearings_lines <<- selected$inc_bearings %>% 
-            split(1:nrow(.)) %>%
-            map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
-            st_as_sfc(crs = 4326) %>%
-            st_sf() %>%
-            cbind(selected$inc_bearings)
+         if (nrow(selected$inc_bearings) > 0) {
+            inc_bearings_lines <<- selected$inc_bearings %>% 
+               split(1:nrow(.)) %>%
+               map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
+               st_as_sfc(crs = 4326) %>%
+               st_sf() %>%
+               cbind(selected$inc_bearings)
+            
+            proxy_map %>%
+               addPolylines(data = inc_bearings_lines, group = 'Current Incidents',
+                            weight = 1,
+                            color = 'orange',
+                            popup = ~ glue('From: {tower_name}<br>',
+                                           'To: {location}<br>',
+                                           'Bearing: {bearing}'))
+         }
+
          
          # determine if some lines do not intersect (TODO: needs work)
          # need to flash warning when no lines intersect
@@ -472,7 +483,7 @@ server <- function(input, output, session) {
             bb <- round(st_bbox(circ), 4)
             
             # add lines and circle to map proxy
-            leafletProxy('map', session) %>%
+            proxy_map %>%
                addPolygons(data = circ, group = 'Estimate',
                            fillColor = 'red', 
                            weight = 0.5) %>%
@@ -482,12 +493,6 @@ server <- function(input, output, session) {
                addPolylines(data = tri_lines, group = 'Triangulate',
                             weight = 1.2,
                             color = 'darkred') %>%
-               addPolylines(data = inc_bearings_lines, group = "Incident Bearings",
-                            weight = 1,
-                            color = 'orange',
-                            popup = ~ glue('From: {tower_name}<br>',
-                                           'To: {location}<br>',
-                                           'Bearing: {bearing}')) %>%
                addCircleMarkers(data = tri_points, group = 'Triangulate',
                                 radius = 10,
                                 fillColor = 'green',
