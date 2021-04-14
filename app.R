@@ -106,11 +106,17 @@ ui <- shinyUI(fluidPage(
       ),
       fluidRow(
          style = 'padding: 20px;',
-         actionBttn('button', 'Calculate',
+         div(actionBttn('button', 'Calculate',
                           style = 'material-flat',
                           block = TRUE,
                           color = 'warning',
                           size = 'lg')),
+         div(style = 'padding-top: 15px;',
+                shinyWidgets::materialSwitch(inputId = 'add_obs', 
+                                             label = 'Add Observation Post', 
+                                             inline = TRUE, 
+                                             status = 'success', value = FALSE))
+      ),
       fluidRow(column(2),
                column(4,
                       h2('Instructions'),
