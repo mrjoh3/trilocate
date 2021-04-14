@@ -206,31 +206,20 @@ server <- function(input, output, session) {
                                     glue('Location: {location}'),
                                     glue('Burnt Area (Ha): {area}')),
                      group = 'Burnt Area') %>%
-         addAwesomeMarkers(data = pb %>% st_cast("POINT"), 
+         addAwesomeMarkers(data = current_incidents %>% st_cast("POINT"), 
                            icon = ~all_icons[category1],
                            popup = ~paste(sep = '<br>',
                                           glue('<strong>{status}</strong>'),
                                           ifelse(category1 == category,
-                                                 glue('Category: {category1}'),
-                                                 glue('Category: {category1} - {category}')),
+                                                 glue('Category: <strong>{category1}</strong>'),
+                                                 glue('Category: <strong>{category1} - {category}</strong>')),
                                           glue('Location: {location}'),
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
-                           group = 'Planned Burns') %>%
-         addAwesomeMarkers(data = fi %>% st_cast("POINT"), 
-                           icon = ~all_icons[category1],
-                           popup = ~paste(sep = '<br>',
-                                          glue('<strong>{status}</strong>'),
-                                          ifelse(category1 == category,
-                                                 glue('Category: {category1}'),
-                                                 glue('Category: {category1} - {category}')),
-                                          glue('Location: {location}'),
-                                          glue('Resources: {resources}'),
-                                          glue('Size: {size}')),
-                           group = 'Current Fires') %>%
+                           group = 'Current Incidents') %>%
          addAwesomeMarkers(data = tow$ers, layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
                            label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
-                           popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
+                           #popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            icon = ~ all_icons[FEATSUBTYP],
                            group = 'Towers') %>%
          leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
@@ -245,10 +234,10 @@ server <- function(input, output, session) {
          leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
-            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area", "Incident Bearings"),
+            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"),
             options = layersControlOptions(collapsed = FALSE)
          ) %>%
-         hideGroup(c("Estimate", "Triangulate", "TFB Districts", "Planned Burns", "Current Fires", "Burnt Area", "Incident Bearings"))
+         hideGroup(c("Estimate", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"))
          
       
    })
@@ -258,28 +247,34 @@ server <- function(input, output, session) {
    
    observeEvent(input$map_marker_click, {
 
-      mclk <- input$map_marker_click
+      mclk <<- input$map_marker_click
       
-      isolate(selected$towers <- c(selected$towers, mclk$id))
-      
-      # calculate incident bearings
-      bears <- statewide %>%
-         filter(category1 %in% c('Fire', 'Planned Burn'),
-                st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = 4326), dist = 50000, sparse = FALSE)) 
+      if (!is.null(mclk$id)) {
          
-      bearing_df <- tibble(tower_id = mclk$id,
-                           tower_name = filter(towers, FEATURE_ID == mclk$id) %>% pull(NAME_LABEL),
-                           tower_X = mclk$lng,
-                           tower_Y = mclk$lat,
-                           sourceId = bears$sourceId,
-                           sourceTitle = bears$sourceTitle,
-                           location = bears$location,
-                           bearing = bearing(c(mclk$lng, mclk$lat), st_coordinates(bears)[,1:2])) %>%
-         mutate(bearing = ifelse(bearing < 0, 360 + bearing, bearing),
-                bearing = round(bearing, 4)) %>%
-         cbind(st_coordinates(bears))
-      
-      isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
+         isolate(selected$towers <- c(selected$towers, mclk$id))
+         
+         # calculate incident bearings
+         bears <- current_incidents %>%
+            filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = 4326), dist = 50000, sparse = FALSE)) 
+         
+         if (nrow(bears) > 0) {
+            bearing_df <- tibble(tower_id = mclk$id,
+                                 tower_name = filter(towers, FEATURE_ID == mclk$id) %>% pull(NAME_LABEL),
+                                 tower_X = mclk$lng,
+                                 tower_Y = mclk$lat,
+                                 sourceId = bears$sourceId,
+                                 sourceTitle = bears$sourceTitle,
+                                 location = bears$location,
+                                 bearing = bearing(c(mclk$lng, mclk$lat), st_coordinates(bears)[,1:2])) %>%
+               mutate(bearing = ifelse(bearing < 0, 360 + bearing, bearing),
+                      bearing = round(bearing, 4)) %>%
+               cbind(st_coordinates(bears))
+            
+            isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
+         }
+         
+      }
+
 
    })
    
