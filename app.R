@@ -71,11 +71,37 @@ current_incidents <- statewide %>%
 
 # map icons
 all_icons <- awesomeIconList(
+   'Smoke Location' = makeAwesomeIcon(icon= 'fire', markerColor = 'orange', iconColor = '#FFFFFF', library = "fa"),
    'Fire' = makeAwesomeIcon(icon = 'fire', markerColor = 'darkred', iconColor = '#FFFFFF', library = "fa"),
-   `Planned Burn` = makeAwesomeIcon(icon = 'fire', markerColor = 'purple', iconColor = '#FFFFFF', library = "fa"),
-   'fire lookout' = makeAwesomeIcon(icon = 'binoculars', markerColor = 'green', iconColor = '#FFFFFF', library = "fa"),
-   'mobile location' = makeAwesomeIcon(icon = 'truck', markerColor = 'blue', iconColor = '#FFFFFF', library = "fa")
+   'Planned Burn' = makeAwesomeIcon(icon = 'fire', markerColor = 'purple', iconColor = '#FFFFFF', library = "fa"),
+   'Fire Lookout' = makeAwesomeIcon(icon = 'binoculars', markerColor = 'green', iconColor = '#FFFFFF', library = "fa"),
+   'Mobile Location' = makeAwesomeIcon(icon = 'truck', markerColor = 'blue', iconColor = '#FFFFFF', library = "fa")
 )
+
+# legend html generator
+# Thanks to Andrew Reid on StackOverflow https://stackoverflow.com/a/47107058/1498485
+markerLegendHTML <- function(IconSet) {
+   
+   # container div:
+   legendHtml <- "<div style='padding: 10px; padding-bottom: 10px;'><h2 style='padding-top:0; padding-bottom:10px; margin: 0;'> Map Legend </h4>"
+   
+   n <- 1
+   # add each icon for font-awesome icons icons:
+   for (Icon in IconSet) {
+      if (Icon[["library"]] == "fa") {
+         legendHtml<- paste0(legendHtml, "<div style='width: auto; height: 45px'>",
+                             "<div style='position: relative; display: inline-block; width: 36px; height: 45px' class='awesome-marker-icon-",Icon[["markerColor"]]," awesome-marker'>",
+                             "<i style='color: #FFFFFF; margin-left: 0px; margin-top: 11px;' class= 'fa fa-",Icon[["icon"]]," fa-inverse'></i>",
+                             "</div>",
+                             "<p style='position: relative; top: 5px; display: inline-block;' >", names(IconSet)[n] ,"</p>",
+                             "</div>")    
+      }
+      n<- n + 1
+   }
+   paste0(legendHtml, "</div>")
+}
+
+
 
 ui <- shinyUI(fluidPage(
       title = APP_TITLE,
@@ -126,21 +152,28 @@ ui <- shinyUI(fluidPage(
                           icon('search'), ' option in the top left of the map. ',
                           'You can also select the "TFB District" option in the map layers and then zoom to any "Total Fire Ban District" by clicking on it. '
                           ),
-                        p('If an observation is not from a tower zoom into the area and click on the map to create a temporary location.'),
+                        p('If an observation is not from a tower, you can click on the ', 
+                          tags$strong('Add Observation Post'), ' switch. ',
+                          'Then zoom into the area of the observation and click on the map to create a temporary location. '),
                       h3('Step 2:'),
-                           p('Click on ',
-                             tags$strong('ALL'),
-                             'of the towers for which you have a known bearing.'),
-                        h3('Step 3:'),
-                           p('Enter the bearing of the smoke sighting for each tower')
+                        p('Click on ',
+                          tags$strong('ALL'),
+                          'of the towers for which you have a known bearing to the smoke column.'),
+                      h3('Step 3:'),
+                        p('Enter the bearing of the smoke sighting for each tower.'),
+                      h3('Step 4:'),
+                        p('Click on the ', tags$strong('Calculate'), ' button')
                       ),
                column(4,
                       h2('About'),
                       p('In Victoria on a hot, dry summer day fire can spread at up to 10 km/h in forest and up to 20 km/h in grassland. ',
                         'The timeliness of the initial response to a fire is critical to containment and reducing the severity and impact of the fire. '),
                       p('Victoria has a network of ', nrow(towers), 'fire watch towers. When smoke is sighted these towers use a triangulation method to narrow in on the exact location. ',
-                        'This application is intended to replicate and simplify this triangulation process, while at the same time incorporate modern reverse geocoding ',
-                        'capabilities that can convert a location into an address.')
+                        'When you select 2 or more towers, the lines drawn from each tower at the given bearing will intersect indicating the location ',
+                        'of the smoke.',
+                        'This application is intended to replicate and simplify the manual triangulation process, while at the same time incorporate modern reverse geocoding ',
+                        'capabilities that can convert a location into an address.'),
+                      div(HTML(markerLegendHTML(all_icons)))
                       ),
                column(2))
   )
@@ -220,7 +253,7 @@ server <- function(input, output, session) {
          addAwesomeMarkers(data = tow$ers, layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
                            label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
                            #popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
-                           icon = ~ all_icons[FEATSUBTYP],
+                           icon = ~ all_icons['Fire Lookout'],
                            group = 'Towers') %>%
          leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
          addMeasure(
@@ -234,10 +267,10 @@ server <- function(input, output, session) {
          leafem::addMouseCoordinates(epsg = 4326) %>%
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
-            overlayGroups = c("Estimate", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"),
+            overlayGroups = c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"),
             options = layersControlOptions(collapsed = FALSE)
          ) %>%
-         hideGroup(c("Estimate", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"))
+         hideGroup(c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"))
          
       
    })
@@ -478,17 +511,15 @@ server <- function(input, output, session) {
                              "Message: {msg}")
             }
             
-            
-            fire_icon <- makeAwesomeIcon(icon= 'fire', markerColor = 'red', iconColor = '#FFFFFF', library = "fa")
             bb <- round(st_bbox(circ), 4)
             
             # add lines and circle to map proxy
             proxy_map %>%
-               addPolygons(data = circ, group = 'Estimate',
+               addPolygons(data = circ, group = 'Smoke Location',
                            fillColor = 'red', 
                            weight = 0.5) %>%
-               addAwesomeMarkers(data = cent, group = 'Estimate',
-                                 icon = fire_icon,
+               addAwesomeMarkers(data = cent, group = 'Smoke Location',
+                                 icon = all_icons['Smoke Location'],
                                  popup = label) %>%
                addPolylines(data = tri_lines, group = 'Triangulate',
                             weight = 1.2,
@@ -499,7 +530,7 @@ server <- function(input, output, session) {
                                 weight = 0.8,
                                 color = 'darkgrey') %>%
                flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
-               showGroup('Estimate')
+               showGroup('Smoke Location')
             
             # pan page back to map (effect only noticeable on mobile)
             runjs('document.getElementById("map").scrollIntoView();')
