@@ -220,7 +220,8 @@ server <- function(input, output, session) {
 
       leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
-         addTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', group = 'Vicmap') %>%
+         #addTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', group = 'Vicmap') %>%
+         addWMSTiles('https://base.maps.vic.gov.au/service?', layers = 'CARTO_WM', group = 'Vicmap') %>%
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
          addPolygons(data = tfb, group = 'TFB Districts', layerId = ~ TFB_DISTRICT, 
