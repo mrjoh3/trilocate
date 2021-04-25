@@ -173,9 +173,12 @@ ui <- shinyUI(fluidPage(
                         'of the smoke.',
                         'This application is intended to replicate and simplify the manual triangulation process, while at the same time incorporate modern reverse geocoding ',
                         'capabilities that can convert a location into an address.'),
-                      div(HTML(markerLegendHTML(all_icons)))
+                      h2('Improvements'),
+                      p('All code for this tool is available on ', tags$a(href = 'https://github.com/mrjoh3/trilocate','Github'), '. ',
+                        'If you experience errors or wish to suggest improvements, please submit a ',
+                        tags$a(href = 'https://github.com/mrjoh3/trilocate/issues', 'Github Issue'), '. ')
                       ),
-               column(2))
+               column(1))
   )
 )
 
