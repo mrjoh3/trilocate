@@ -83,7 +83,7 @@ all_icons <- awesomeIconList(
 markerLegendHTML <- function(IconSet) {
    
    # container div:
-   legendHtml <- "<div style='padding: 10px; padding-bottom: 10px;'><h2 style='padding-top:0; padding-bottom:10px; margin: 0;'> Map Legend </h4>"
+   legendHtml <- "<div style='padding: 10px; padding-bottom: 10px;'><h2 style='padding-top:0; padding-bottom:10px; margin-top: 11px;'> Map Legend </h2>"
    
    n <- 1
    # add each icon for font-awesome icons icons:
@@ -143,10 +143,12 @@ ui <- shinyUI(fluidPage(
                                              inline = TRUE, 
                                              status = 'success', value = FALSE))
       ),
-      fluidRow(column(2),
-               column(4,
+      fluidRow(column(1),
+               column(3,
+                      div(HTML(markerLegendHTML(all_icons)))),
+               column(3,
                       h2('Instructions'),
-                      h3('Step 1:'),
+                      h4('Step 1:'),
                         p('Locate the towers that have observed a smoke column. ',
                           'You can zoom into the area or use the search ',
                           icon('search'), ' option in the top left of the map. ',
@@ -155,13 +157,13 @@ ui <- shinyUI(fluidPage(
                         p('If an observation is not from a tower, you can click on the ', 
                           tags$strong('Add Observation Post'), ' switch. ',
                           'Then zoom into the area of the observation and click on the map to create a temporary location. '),
-                      h3('Step 2:'),
+                      h4('Step 2:'),
                         p('Click on ',
                           tags$strong('ALL'),
                           'of the towers for which you have a known bearing to the smoke column.'),
-                      h3('Step 3:'),
+                      h4('Step 3:'),
                         p('Enter the bearing of the smoke sighting for each tower.'),
-                      h3('Step 4:'),
+                      h4('Step 4:'),
                         p('Click on the ', tags$strong('Calculate'), ' button')
                       ),
                column(4,
