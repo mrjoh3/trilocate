@@ -5,9 +5,9 @@ account: mrjoh3
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 3909894
-bundleId: 4436556
+bundleId: 4516271
 url: https://mrjoh3.shinyapps.io/trilocate/
-when: 1617699217.13695
+when: 1619346339.65063
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: process_spatial.R|shp/geomark_point.cpg|shp/geomark_point.dbf|shp/geomark_point.prj|shp/geomark_point.shp|shp/geomark_point.shx
