@@ -191,12 +191,14 @@ server <- function(input, output, session) {
                               inc_bearings = tibble())
    tow <- reactiveValues(ers = towers)
    
+   
+   # add new observation points by clicking anywhere on the map
    observeEvent(input$map_click, {
       
       if (input$add_obs) {
          
          click <- input$map_click
-         sc <<- input$map_shape_click
+         sc <- input$map_shape_click
          
          assign('mclk', click, .GlobalEnv)
          
@@ -214,9 +216,7 @@ server <- function(input, output, session) {
          } else {
             towers
          }
-         
       }
-      
    })
    
    
@@ -284,9 +284,10 @@ server <- function(input, output, session) {
    proxy_map <- leafletProxy('map', session)
    
    
+   # when clicking on a tower record the id and calculate bearings to incidents within 50km
    observeEvent(input$map_marker_click, {
 
-      mclk <<- input$map_marker_click
+      mclk <- input$map_marker_click
       
       if (!is.null(mclk$id)) {
          
@@ -311,12 +312,11 @@ server <- function(input, output, session) {
             
             isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
          }
-         
       }
-
-
    })
    
+   
+   # zoom into selected map area
    observeEvent(input$map_shape_click, {
       
       shp_click <- input$map_shape_click
@@ -326,15 +326,13 @@ server <- function(input, output, session) {
          
          proxy_map %>%
             flyToBounds(bb_shp[['xmin']], bb_shp[['ymin']], bb_shp[['xmax']], bb_shp[['ymax']]) 
-         
       }
-
-         
    })
    
+   
+   # render forms for each tower selected
    observe({
       
-      # construct UI
       output$towers <- renderUI({
          
          if (length(selected$towers) == 0) {
@@ -355,20 +353,13 @@ server <- function(input, output, session) {
                       sliderInput(glue('vis_{id}'), label = 'Visibility (km)', min = 0, max = 100, step = 10, value = 50), 
                       tags$hr()
                       )
-               
             }))
-            
          }
-
-         
-         
       })
-      
-      
-      # render forms
-      
    })
    
+   
+   # calculate location of smoke sighting
    observeEvent(input$button, {
       
       if (length(selected$towers) < 2) {
@@ -381,18 +372,14 @@ server <- function(input, output, session) {
          
       } else {
          
-         bearings <<- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
-         visibility <<- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
+         bearings <- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
+         visibility <- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
          
-         twrs <<- tow$ers %>% 
+         twrs <- tow$ers %>% 
             filter(FEATURE_ID %in% selected$towers) %>%
             left_join(tibble(FEATURE_ID = selected$towers,
                              bear = bearings,
                              vis = visibility))
-         
-         
-         
-         
          
          #create end points
          dest <- destPoint(st_coordinates(twrs), twrs$bear, twrs$vis)
@@ -426,7 +413,7 @@ server <- function(input, output, session) {
          
          # create lines for incident bearings
          if (nrow(selected$inc_bearings) > 0) {
-            inc_bearings_lines <<- selected$inc_bearings %>% 
+            inc_bearings_lines <- selected$inc_bearings %>% 
                split(1:nrow(.)) %>%
                map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
                st_as_sfc(crs = 4326) %>%
@@ -497,10 +484,10 @@ server <- function(input, output, session) {
                st_transform(4326)
             
             # convert location centre to gda and reverse geocode
-            address <<- ''
+            address <- ''
             try(
                
-               address <<- cent %>%
+               address <- cent %>%
                   st_as_sf(crs = 4326) %>%
                   tmaptools::rev_geocode_OSM(projection = 4326)
                
