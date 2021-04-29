@@ -25,9 +25,9 @@ APP_TITLE <- 'Smoke Locate'
 # import all towers (TODO: find a dynamic import that updates)
 towers <- readRDS('towers.rds') %>%
    st_transform(4326) %>%
-   select(FEATSUBTYP, 
-          FEATURE_ID, 
-          NAME_LABEL)
+   select(id,
+          type, 
+          name)
 
 tfb <- readRDS('tfb.rds') %>%
    st_transform(4326)
@@ -170,7 +170,7 @@ ui <- shinyUI(fluidPage(
                       h2('About'),
                       p('In Victoria on a hot, dry summer day fire can spread at up to 10 km/h in forest and up to 20 km/h in grassland. ',
                         'The timeliness of the initial response to a fire is critical to containment and reducing the severity and impact of the fire. '),
-                      p('Victoria has a network of ', nrow(towers), 'fire watch towers. When smoke is sighted these towers use a triangulation method to narrow in on the exact location. ',
+                      p('Victoria has a network of ', nrow(filter(towers, state == 'VIC')), 'fire watch towers. When smoke is sighted these towers use a triangulation method to narrow in on the exact location. ',
                         'When you select 2 or more towers, the lines drawn from each tower at the given bearing will intersect indicating the location ',
                         'of the smoke.',
                         'This application is intended to replicate and simplify the manual triangulation process, while at the same time incorporate modern reverse geocoding ',
