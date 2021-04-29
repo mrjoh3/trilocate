@@ -21,20 +21,18 @@ library(tmaptools)
 
 
 APP_TITLE <- 'Smoke Locate'
+APP_CRS <- 4326
 
 # import all towers (TODO: find a dynamic import that updates)
 towers <- readRDS('towers.rds') %>%
-   st_transform(4326) %>%
-   select(id,
-          type, 
-          name)
+   st_transform(APP_CRS) 
 
 tfb <- readRDS('tfb.rds') %>%
-   st_transform(4326)
+   st_transform(APP_CRS)
 
 # get current situation 
 statewide <- st_read('https://www.emergency.vic.gov.au/public/osom-geojson.json', stringsAsFactors = FALSE) %>% 
-   st_transform(4326) %>%
+   st_transform(APP_CRS) %>%
    mutate(sizeFmt = as.character(sizeFmt),
           sizeFmt = ifelse(sizeFmt == 'character(0)', '', sizeFmt)) %>%
    filter(!is.na(st_is_valid(.))) %>%
@@ -207,9 +205,9 @@ server <- function(input, output, session) {
             id <- as.integer(Sys.time())
             isolate(selected$towers <- c(selected$towers, id))
             
-            isolate(tow$ers <- st_sf(FEATSUBTYP = 'mobile location', 
-                                     FEATURE_ID = id, 
-                                     NAME_LABEL = 'New Location', 
+            isolate(tow$ers <- st_sf(type = 'mobile location', 
+                                     id = id, 
+                                     name = 'New Location', 
                                      geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
                        rbind(tow$ers, .))
             
@@ -225,7 +223,6 @@ server <- function(input, output, session) {
 
       leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
-         #addTiles('https://base.maps.vic.gov.au/wmts/CARTO_WM/EPSG:3857/${z}/${x}/${y}.png', group = 'Vicmap') %>%
          addWMSTiles('https://base.maps.vic.gov.au/service?', layers = 'CARTO_WM', group = 'Vicmap') %>%
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
          addProviderTiles(providers$Esri.WorldImagery, group = "Aerial") %>%
@@ -256,9 +253,9 @@ server <- function(input, output, session) {
                                           glue('Resources: {resources}'),
                                           glue('Size: {size}')),
                            group = 'Current Incidents') %>%
-         addAwesomeMarkers(data = tow$ers, layerId = ~ FEATURE_ID, # TODO: responsive value vey slow may be better to use observe, remove markers and add again with update
-                           label = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
-                           #popup = ~ glue('{NAME_LABEL} ({FEATURE_ID})'),
+         addAwesomeMarkers(data = tow$ers, layerId = ~ id, # TODO: responsive value very slow may be better to use observe, remove markers and add again with update
+                           label = ~ glue('{name} ({id})'),
+                           #popup = ~ glue('{name} ({id})'),
                            icon = ~ all_icons['Fire Lookout'],
                            group = 'Towers') %>%
          leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
@@ -270,7 +267,7 @@ server <- function(input, output, session) {
             completedColor = "#7D4479") %>%
          addScaleBar(position = 'bottomright') %>%
          leaflet.extras::addFullscreenControl() %>%
-         leafem::addMouseCoordinates(epsg = 4326) %>%
+         leafem::addMouseCoordinates(epsg = APP_CRS) %>%
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
             overlayGroups = c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"),
@@ -287,7 +284,7 @@ server <- function(input, output, session) {
    # when clicking on a tower record the id and calculate bearings to incidents within 50km
    observeEvent(input$map_marker_click, {
 
-      mclk <- input$map_marker_click
+      mclk <<- input$map_marker_click
       
       if (!is.null(mclk$id)) {
          
@@ -295,11 +292,11 @@ server <- function(input, output, session) {
          
          # calculate incident bearings
          bears <- current_incidents %>%
-            filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = 4326), dist = 50000, sparse = FALSE)) 
+            filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = APP_CRS), dist = 50000, sparse = FALSE)) 
          
          if (nrow(bears) > 0) {
             bearing_df <- tibble(tower_id = mclk$id,
-                                 tower_name = filter(towers, FEATURE_ID == mclk$id) %>% pull(NAME_LABEL),
+                                 tower_name = filter(towers, id == mclk$id) %>% pull(name),
                                  tower_X = mclk$lng,
                                  tower_Y = mclk$lat,
                                  sourceId = bears$sourceId,
@@ -343,14 +340,14 @@ server <- function(input, output, session) {
             
             tagList(lapply(1:length(selected$towers), function(n){
                
-               id <- selected$towers[n]
-               r <- filter(tow$ers, FEATURE_ID == id)
-               name <- r[['NAME_LABEL']]
+               tower_id <- selected$towers[n]
+               r <- filter(tow$ers, id == tower_id)
+               name <- r[['name']]
                
                column(12 / length(selected$towers),
                       h3(name),
-                      numericInput(glue('bearing_{id}'), label = 'Bearing', value = NULL),
-                      sliderInput(glue('vis_{id}'), label = 'Visibility (km)', min = 0, max = 100, step = 10, value = 50), 
+                      numericInput(glue('bearing_{tower_id}'), label = 'Bearing', value = NULL),
+                      sliderInput(glue('vis_{tower_id}'), label = 'Visibility (km)', min = 0, max = 100, step = 10, value = 50), 
                       tags$hr()
                       )
             }))
@@ -376,8 +373,8 @@ server <- function(input, output, session) {
          visibility <- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
          
          twrs <- tow$ers %>% 
-            filter(FEATURE_ID %in% selected$towers) %>%
-            left_join(tibble(FEATURE_ID = selected$towers,
+            filter(id %in% selected$towers) %>%
+            left_join(tibble(id = selected$towers,
                              bear = bearings,
                              vis = visibility))
          
@@ -390,12 +387,12 @@ server <- function(input, output, session) {
             as.data.frame() %>% 
             split(1:nrow(.)) %>%
             map(., ~ st_linestring(rbind(c(.x$X,.x$Y),c(.x$lon,.x$lat)))) %>%
-            st_as_sfc(crs = 4326)
+            st_as_sfc(crs = APP_CRS)
          
          # get points where lines intersect
          tri <- lines %>%
             st_intersection() %>% 
-            st_as_sf(crs = 4326) %>%
+            st_as_sf(crs = APP_CRS) %>%
             mutate(type = st_geometry_type(x))
          
          tri_lines <- tri %>%
@@ -416,7 +413,7 @@ server <- function(input, output, session) {
             inc_bearings_lines <- selected$inc_bearings %>% 
                split(1:nrow(.)) %>%
                map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
-               st_as_sfc(crs = 4326) %>%
+               st_as_sfc(crs = APP_CRS) %>%
                st_sf() %>%
                cbind(selected$inc_bearings)
             

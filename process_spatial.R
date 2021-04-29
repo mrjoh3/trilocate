@@ -23,7 +23,8 @@ twr <- vicmap_query(layer = "datavic:VMFEAT_GEOMARK_POINT") %>%
          type = FEATURE_SUBTYPE,
          name = NAME_LABEL,
          state = STATE) %>%
-  st_join(select(tfb, TFB_DISTRICT))
+  st_join(select(tfb, TFB_DISTRICT)) %>%
+  mutate(TFB_DISTRICT = ifelse(is.na(TFB_DISTRICT), state, TFB_DISTRICT))
 
 saveRDS(twr, 'towers.rds')
 
