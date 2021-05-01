@@ -1,0 +1,43 @@
+---
+title: "Smoke Locate"
+output: 
+  html_document:
+    self_contained: true
+params:
+  map: NA
+  towers: NA
+  address: NA
+  inc_bearings: NA
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(leaflet)
+library(leafem)
+library(leaflet.extras)
+library(knitr)
+library(dplyr)
+```
+
+## Smoke Located at:
+
+# `r params$address[[1]]$name`
+
+There are currently `r length(unique(params$inc_bearings$sourceId))` incidents within 50 km of the `r nrow(params$towers)` towers selected.
+
+## Map
+
+```{r map, fig.height=6, fig.width=9}
+params$map
+```
+
+## Observation Locations
+
+
+```{r towers}
+kable(params$towers)
+```
+
+
+### This report was generated on `r format(as.POSIXct(Sys.time(), tz = "Australia/Melbourne"), "%F %R UTC%z")`
