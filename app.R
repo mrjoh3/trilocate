@@ -134,13 +134,24 @@ ui <- shinyUI(fluidPage(
                           style = 'material-flat',
                           block = TRUE,
                           color = 'warning',
-                          size = 'lg')),
-         div(style = 'padding-top: 15px;',
-                shinyWidgets::materialSwitch(inputId = 'add_obs', 
-                                             label = 'Add Observation Post', 
-                                             inline = TRUE, 
-                                             status = 'success', value = FALSE))
+                          size = 'lg'))
       ),
+      fluidRow(column(6,
+                      div(style = 'padding-top: 15px;',
+                          shinyWidgets::materialSwitch(inputId = 'add_obs', 
+                                                       label = 'Add Observation Post', 
+                                                       inline = TRUE, 
+                                                       status = 'success', value = FALSE)),
+                      ),
+               column(6,
+                      # display download button after calculation success
+                      conditionalPanel(condition = 'true', 
+                         div(style = 'float: right;',
+                             downloadBttn('download',
+                                          style = 'material-flat',
+                                          size = 'md',
+                                          color = 'success'))
+                      ))),
       fluidRow(column(1),
                column(3,
                       div(HTML(markerLegendHTML(all_icons)))),
@@ -189,6 +200,9 @@ server <- function(input, output, session) {
                               inc_bearings = tibble())
    tow <- reactiveValues(ers = towers)
    
+   export <-reactiveValues(map = NULL,
+                           address = '')
+   
    
    # add new observation points by clicking anywhere on the map
    observeEvent(input$map_click, {
@@ -221,7 +235,7 @@ server <- function(input, output, session) {
    
    output$map <- renderLeaflet({
 
-      leaflet() %>%
+      map <- leaflet() %>%
          addProviderTiles(providers$CartoDB.Positron, group = "Default") %>%
          addWMSTiles('https://base.maps.vic.gov.au/service?', layers = 'CARTO_WM', group = 'Vicmap') %>%
          addProviderTiles(providers$OpenStreetMap, group = 'Streets') %>%
@@ -275,6 +289,9 @@ server <- function(input, output, session) {
          ) %>%
          hideGroup(c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"))
          
+      isolate(export$map <- map)
+      
+      map
       
    })
    
@@ -295,7 +312,7 @@ server <- function(input, output, session) {
             filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = APP_CRS), dist = 50000, sparse = FALSE)) 
          
          if (nrow(bears) > 0) {
-            bearing_df <- tibble(tower_id = mclk$id,
+            bearing_df <<- tibble(tower_id = mclk$id,
                                  tower_name = filter(towers, id == mclk$id) %>% pull(name),
                                  tower_X = mclk$lng,
                                  tower_Y = mclk$lat,
@@ -378,6 +395,8 @@ server <- function(input, output, session) {
                              bear = bearings,
                              vis = visibility))
          
+         isolate(export$towers <- twrs)
+         
          #create end points
          dest <- destPoint(st_coordinates(twrs), twrs$bear, twrs$vis)
          
@@ -410,20 +429,28 @@ server <- function(input, output, session) {
          
          # create lines for incident bearings
          if (nrow(selected$inc_bearings) > 0) {
-            inc_bearings_lines <- selected$inc_bearings %>% 
+            inc_bearings_lines <<- selected$inc_bearings %>% 
                split(1:nrow(.)) %>%
                map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
                st_as_sfc(crs = APP_CRS) %>%
                st_sf() %>%
                cbind(selected$inc_bearings)
             
-            proxy_map %>%
+            add_bearings <- function(map){
+               map %>% 
                addPolylines(data = inc_bearings_lines, group = 'Current Incidents',
                             weight = 1,
                             color = 'orange',
                             popup = ~ glue('From: {tower_name}<br>',
                                            'To: {location}<br>',
                                            'Bearing: {bearing}'))
+            }
+            
+            test_map <<- export$map
+            
+            isolate(export$map <- add_bearings(export$map))
+            add_bearings(proxy_map)
+               
          }
 
          
@@ -481,20 +508,19 @@ server <- function(input, output, session) {
                st_transform(4326)
             
             # convert location centre to gda and reverse geocode
-            address <- ''
             try(
                
-               address <- cent %>%
+               export$address <- cent %>%
                   st_as_sf(crs = 4326) %>%
                   tmaptools::rev_geocode_OSM(projection = 4326)
                
             )
             
-            if (address != '') {
+            if (export$address != '') {
                
                coord_lab <- st_coordinates(cent)
                
-               label <- glue('{address[[1]]$name}<BR>',
+               label <- glue('{export$address[[1]]$name}<BR>',
                              "Longitude: {round(coord_lab[1], 8)}<BR>",
                              "Latitude: {round(coord_lab[2], 8)}<BR>",
                              "Accuracy: {floor(radius)}m<BR>",
@@ -503,24 +529,32 @@ server <- function(input, output, session) {
             
             bb <- round(st_bbox(circ), 4)
             
-            # add lines and circle to map proxy
-            proxy_map %>%
+            # add lines and circle to map
+            
+            add_2_map <- function(map){
+               map %>%
                addPolygons(data = circ, group = 'Smoke Location',
                            fillColor = 'red', 
                            weight = 0.5) %>%
-               addAwesomeMarkers(data = cent, group = 'Smoke Location',
-                                 icon = all_icons['Smoke Location'],
-                                 popup = label) %>%
-               addPolylines(data = tri_lines, group = 'Triangulate',
-                            weight = 1.2,
-                            color = 'darkred') %>%
-               addCircleMarkers(data = tri_points, group = 'Triangulate',
-                                radius = 10,
-                                fillColor = 'green',
-                                weight = 0.8,
-                                color = 'darkgrey') %>%
-               flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
-               showGroup('Smoke Location')
+                  addAwesomeMarkers(data = cent, group = 'Smoke Location',
+                                    icon = all_icons['Smoke Location'],
+                                    popup = label) %>%
+                  addPolylines(data = tri_lines, group = 'Triangulate',
+                               weight = 1.2,
+                               color = 'darkred') %>%
+                  addCircleMarkers(data = tri_points, group = 'Triangulate',
+                                   radius = 10,
+                                   fillColor = 'green',
+                                   weight = 0.8,
+                                   color = 'darkgrey') %>%
+                  flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
+                  showGroup('Smoke Location')
+            }
+            
+            isolate(export$map <- add_2_map(export$map))
+            
+            add_2_map(proxy_map)
+               
             
             # pan page back to map (effect only noticeable on mobile)
             runjs('document.getElementById("map").scrollIntoView();')
@@ -535,6 +569,33 @@ server <- function(input, output, session) {
       updateMaterialSwitch(session, 'add_obs', value = FALSE)
       
    })
+   
+   output$download <- downloadHandler(
+      
+      filename = paste0("smoke_report_", format(Sys.time(), '%Y%m%d_%H%M'), ".html"),
+      content = function(file) {
+         
+         tempReport <- file.path(tempdir(), "report.Rmd")
+         file.copy("report.Rmd", tempReport, overwrite = TRUE)
+         
+         # Set up parameters to pass to Rmd document
+         params <- list(map = export$map,
+                        towers = export$towers,
+                        address = export$address,
+                        inc_bearings = selected$inc_bearings
+         )
+         
+         rmarkdown::render(tempReport,
+                           'html_document',
+                           output_file = file,
+                           clean = FALSE,
+                           params = params,
+                           envir = new.env(parent = globalenv())
+         )
+      }
+   )
+   
+   
    
 }
 
