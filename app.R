@@ -191,7 +191,11 @@ ui <- shinyUI(fluidPage(
                         'If you experience errors or wish to suggest improvements, please submit a ',
                         tags$a(href = 'https://github.com/mrjoh3/trilocate/issues', 'Github Issue'), '. ')
                       ),
-               column(1))
+               column(1)),
+      fluidRow(tags$hr(),
+               div(class = 'pull-right', style = 'padding-right: 20px; padding-bottom: 20px;',
+                   icon('fire', class = 'orange', lib = 'glyphicon'), APP_TITLE)
+      )
   )
 )
 
