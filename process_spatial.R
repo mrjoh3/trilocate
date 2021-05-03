@@ -4,12 +4,13 @@
 
 library(dplyr)
 library(sf)
-library(stringr)
 library(VicmapR)
 
 
 # map zoom area (OPTIONAL)
-tfb <- vicmap_query(layer = "datavic:VMADMIN_CFA_TFB_DISTRICT") %>% collect()
+tfb <- vicmap_query(layer = "datavic:VMADMIN_CFA_TFB_DISTRICT") %>% collect() %>%
+  st_simplify()
+
 
 saveRDS(tfb, 'tfb.rds')
 
