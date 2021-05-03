@@ -21,7 +21,8 @@ library(tmaptools)
 
 
 APP_TITLE <- 'Smoke Locate'
-APP_CRS <- 4326
+APP_CRS <- 4326 # WGS84
+REPORT_CRS <- 4283 # GDA94
 
 # import all towers (TODO: find a dynamic import that updates)
 towers <- readRDS('towers.rds') %>%
@@ -112,7 +113,7 @@ ui <- shinyUI(fluidPage(
 
             # Application title
       titlePanel(withTags(
-         div(icon('fire', class = 'orange'), APP_TITLE, 
+         div(icon('fire', class = 'orange', lib = 'glyphicon'), APP_TITLE, 
              div(class = 'pull-right',
                  a(href = 'https://github.com/mrjoh3/trilocate',
                    icon('github'))), hr() )
@@ -145,13 +146,12 @@ ui <- shinyUI(fluidPage(
                       ),
                column(6,
                       # display download button after calculation success
-                      conditionalPanel(condition = 'true', 
-                         div(style = 'float: right;',
-                             downloadBttn('download',
+                      div(style = 'float: right;', hidden = TRUE, id = 'download_div',
+                             downloadBttn(outputId = 'download',
                                           style = 'material-flat',
                                           size = 'md',
                                           color = 'success'))
-                      ))),
+                      )),
       fluidRow(column(1),
                column(3,
                       div(HTML(markerLegendHTML(all_icons)))),
@@ -171,9 +171,11 @@ ui <- shinyUI(fluidPage(
                           tags$strong('ALL'),
                           'of the towers for which you have a known bearing to the smoke column.'),
                       h4('Step 3:'),
-                        p('Enter the bearing of the smoke sighting for each tower.'),
+                        p('Enter the bearing of the smoke sighting for each tower and adjust the visibility distance.',
+                          'Then click on the ', tags$strong('Calculate'), ' button.'),
                       h4('Step 4:'),
-                        p('Click on the ', tags$strong('Calculate'), ' button')
+                        p('If a location is successfully calculated, a ', tags$strong('Download'), ' button will appear. ',
+                          'Once clicked a HTML report will download, this can either be shared directly or saved as a PDF before emailing.')
                       ),
                column(4,
                       h2('About'),
@@ -197,11 +199,23 @@ ui <- shinyUI(fluidPage(
 server <- function(input, output, session) {
    
    selected <- reactiveValues(towers = c(),
-                              inc_bearings = tibble())
+                              inc_bearings = tibble(),
+                              success = FALSE)
    tow <- reactiveValues(ers = towers)
    
    export <-reactiveValues(map = NULL,
-                           address = '')
+                           address = '',
+                           coords = NULL,
+                           crs = NULL)
+   
+   # only show download button after successful calculation
+   observe({
+      if (selected$success){
+         shinyjs::showElement(id = 'download_div')
+      } else {
+         shinyjs::hideElement(id = 'download_div')
+      }
+   })
    
    
    # add new observation points by clicking anywhere on the map
@@ -222,7 +236,7 @@ server <- function(input, output, session) {
             isolate(tow$ers <- st_sf(type = 'mobile location', 
                                      id = id, 
                                      name = 'New Location', 
-                                     geometry = list(st_point(c(click$lng, click$lat))), crs = 4326) %>%
+                                     geometry = list(st_point(c(click$lng, click$lat))), crs = APP_CRS) %>%
                        rbind(tow$ers, .))
             
          } else {
@@ -301,7 +315,7 @@ server <- function(input, output, session) {
    # when clicking on a tower record the id and calculate bearings to incidents within 50km
    observeEvent(input$map_marker_click, {
 
-      mclk <<- input$map_marker_click
+      mclk <- input$map_marker_click
       
       if (!is.null(mclk$id)) {
          
@@ -376,197 +390,223 @@ server <- function(input, output, session) {
    # calculate location of smoke sighting
    observeEvent(input$button, {
       
-      if (length(selected$towers) < 2) {
-         
-         shinyalert("ERROR",
-                    "You need to select more than one tower before a location can be estimated",
-                    type = 'error')
-         
-         ##TODO:  change this to estimate location based on one tower with bearing and distance
-         
-      } else {
-         
-         bearings <- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
-         visibility <- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
-         
-         twrs <- tow$ers %>% 
-            filter(id %in% selected$towers) %>%
-            left_join(tibble(id = selected$towers,
-                             bear = bearings,
-                             vis = visibility))
-         
-         isolate(export$towers <- twrs)
-         
-         #create end points
-         dest <- destPoint(st_coordinates(twrs), twrs$bear, twrs$vis)
-         
-         # draw lines from towers to end points
-         lines <- st_coordinates(twrs) %>%
-            cbind(dest) %>% 
-            as.data.frame() %>% 
-            split(1:nrow(.)) %>%
-            map(., ~ st_linestring(rbind(c(.x$X,.x$Y),c(.x$lon,.x$lat)))) %>%
-            st_as_sfc(crs = APP_CRS)
-         
-         # get points where lines intersect
-         tri <- lines %>%
-            st_intersection() %>% 
-            st_as_sf(crs = APP_CRS) %>%
-            mutate(type = st_geometry_type(x))
-         
-         tri_lines <- tri %>%
-            filter(type == 'LINESTRING')
-         
-         tri_points <- tri %>%
-            filter(type == 'POINT') 
-         
-         # draw circle around points
-         cent <- tri_points %>%
-            st_union() %>%
-            st_convex_hull() %>% 
-            st_centroid() 
-         
-         
-         # create lines for incident bearings
-         if (nrow(selected$inc_bearings) > 0) {
-            inc_bearings_lines <<- selected$inc_bearings %>% 
-               split(1:nrow(.)) %>%
-               map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
-               st_as_sfc(crs = APP_CRS) %>%
-               st_sf() %>%
-               cbind(selected$inc_bearings)
-            
-            add_bearings <- function(map){
-               map %>% 
-               addPolylines(data = inc_bearings_lines, group = 'Current Incidents',
-                            weight = 1,
-                            color = 'orange',
-                            popup = ~ glue('From: {tower_name}<br>',
-                                           'To: {location}<br>',
-                                           'Bearing: {bearing}'))
-            }
-            
-            test_map <<- export$map
-            
-            isolate(export$map <- add_bearings(export$map))
-            add_bearings(proxy_map)
-               
-         }
-
-         
-         # determine if some lines do not intersect (TODO: needs work)
-         # need to flash warning when no lines intersect
-         # need to account for 2 lines and only on intersect (currently assumes perfect accuracy)
-         if (nrow(tri_points) == 0) {
-            
-            ## NO INTERSECTION FOUND 
-            
-            bb_lines <- st_bbox(lines)
-            
-            # add lines and circle to map proxy
-            proxy_map %>%
-               addPolylines(data = st_as_sf(lines, crs = 4326), group = 'Triangulate',
-                            weight = 1.2,
-                            color = 'darkred') %>%
-               flyToBounds(bb_lines[['xmin']], bb_lines[['ymin']], bb_lines[['xmax']], bb_lines[['ymax']]) %>%
-               showGroup('Triangulate')
-            
-            # pan page back to map (effect only noticeable on mobile)
-            runjs('document.getElementById("map").scrollIntoView();')
-            
-            shinyalert("WARNING",
-                       "The supplied towers and bearings do not intersect. Towers may be observing multiple incidents, or the visibility of a tower may need to be extended. Use the red lines on the map as a guide.",
-                       type = 'warning')
-            
-            
-         } else {
-            
-            ## INTERSECTION SUCCESSFULL
-            
-            if (nrow(tri_points) < nrow(tri_lines)) { # TODO: examine different intersection patterns. Pattern below may not always hold
-               
-               radius <- max(st_distance(twrs, cent)) * 0.005
-               # TODO: make msg dark red
-               
-               if (nrow(tri_lines) == 2 & nrow(tri_points) == 1) {
-                  msg <- 'Only 2 towers were selected. Accuracy reflects distance from towers to intersecting point(s)'
-               } else {
-                  msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
-               }
-               
-               
-            } else {
-               
-               radius <- max(st_distance(tri_points, cent))
-               msg <- 'All lines intersect.'
-            }
-            
-            
-            circ <- cent %>%
-               st_transform(3111) %>%
-               st_buffer(radius * 1.1) %>%
-               st_transform(4326)
-            
-            # convert location centre to gda and reverse geocode
-            try(
-               
-               export$address <- cent %>%
-                  st_as_sf(crs = 4326) %>%
-                  tmaptools::rev_geocode_OSM(projection = 4326)
-               
-            )
-            
-            if (export$address != '') {
-               
-               coord_lab <- st_coordinates(cent)
-               
-               label <- glue('{export$address[[1]]$name}<BR>',
-                             "Longitude: {round(coord_lab[1], 8)}<BR>",
-                             "Latitude: {round(coord_lab[2], 8)}<BR>",
-                             "Accuracy: {floor(radius)}m<BR>",
-                             "Message: {msg}")
-            }
-            
-            bb <- round(st_bbox(circ), 4)
-            
-            # add lines and circle to map
-            
-            add_2_map <- function(map){
-               map %>%
-               addPolygons(data = circ, group = 'Smoke Location',
-                           fillColor = 'red', 
-                           weight = 0.5) %>%
-                  addAwesomeMarkers(data = cent, group = 'Smoke Location',
-                                    icon = all_icons['Smoke Location'],
-                                    popup = label) %>%
-                  addPolylines(data = tri_lines, group = 'Triangulate',
-                               weight = 1.2,
-                               color = 'darkred') %>%
-                  addCircleMarkers(data = tri_points, group = 'Triangulate',
-                                   radius = 10,
-                                   fillColor = 'green',
-                                   weight = 0.8,
-                                   color = 'darkgrey') %>%
-                  flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
-                  showGroup('Smoke Location')
-            }
-            
-            isolate(export$map <- add_2_map(export$map))
-            
-            add_2_map(proxy_map)
-               
-            
-            # pan page back to map (effect only noticeable on mobile)
-            runjs('document.getElementById("map").scrollIntoView();')
-            
-            
-            
-            
-         }
-         
-      }
-      
-      updateMaterialSwitch(session, 'add_obs', value = FALSE)
+     withProgress({
+        
+        setProgress(0.1, 'Calculating', 'preparing for calculation')
+        
+        if (length(selected$towers) < 2) {
+           
+           isolate(selected$success <- FALSE)
+           
+           shinyalert("ERROR",
+                      "You need to select more than one tower before a location can be estimated",
+                      type = 'error')
+           
+           ##TODO:  change this to estimate location based on one tower with bearing and distance
+           
+        } else {
+           
+           bearings <- map_dbl(selected$towers, ~ glue('bearing_{.x}') %>% input[[.]])
+           visibility <- map_dbl(selected$towers, ~ glue('vis_{.x}') %>% input[[.]] * 1000)
+           
+           twrs <- tow$ers %>% 
+              filter(id %in% selected$towers) %>%
+              left_join(tibble(id = selected$towers,
+                               bear = bearings,
+                               vis = visibility))
+           
+           isolate(export$towers <- twrs)
+           
+           #create end points
+           dest <- destPoint(st_coordinates(twrs), twrs$bear, twrs$vis)
+           
+           # draw lines from towers to end points
+           lines <- st_coordinates(twrs) %>%
+              cbind(dest) %>% 
+              as.data.frame() %>% 
+              split(1:nrow(.)) %>%
+              map(., ~ st_linestring(rbind(c(.x$X,.x$Y),c(.x$lon,.x$lat)))) %>%
+              st_as_sfc(crs = APP_CRS)
+           
+           setProgress(0.3, 'Calculating', 'collate tower details')
+           
+           # get points where lines intersect
+           tri <- lines %>%
+              st_intersection() %>% 
+              st_as_sf(crs = APP_CRS) %>%
+              mutate(type = st_geometry_type(x))
+           
+           tri_lines <- tri %>%
+              filter(type == 'LINESTRING')
+           
+           tri_points <- tri %>%
+              filter(type == 'POINT') 
+           
+           # draw circle around points and get the centre
+           cent <- tri_points %>%
+              st_union() %>%
+              st_convex_hull() %>% 
+              st_centroid() 
+           
+           isolate({
+              expt <<- cent %>% st_transform(REPORT_CRS)
+              export$coords <- expt %>% st_coordinates() %>% as.data.frame()
+              export$crs <- expt %>% st_crs()
+           })
+           
+           setProgress(0.5, 'Calculating', 'get bearing to local incidents')
+           
+           # create lines for incident bearings
+           if (nrow(selected$inc_bearings) > 0) {
+              inc_bearings_lines <- selected$inc_bearings %>% 
+                 split(1:nrow(.)) %>%
+                 map(., ~ st_linestring(rbind(c(.x$tower_X,.x$tower_Y),c(.x$X,.x$Y)))) %>%
+                 st_as_sfc(crs = APP_CRS) %>%
+                 st_sf() %>%
+                 cbind(selected$inc_bearings)
+              
+              add_bearings <- function(map){
+                 map %>% 
+                    addPolylines(data = inc_bearings_lines, group = 'Current Incidents',
+                                 weight = 1,
+                                 color = 'orange',
+                                 popup = ~ glue('From: {tower_name}<br>',
+                                                'To: {location}<br>',
+                                                'Bearing: {bearing}'))
+              }
+              
+              isolate(export$map <- add_bearings(export$map))
+              add_bearings(proxy_map)
+              
+           }
+           
+           
+           # determine if some lines do not intersect (TODO: needs work)
+           # need to flash warning when no lines intersect
+           # need to account for 2 lines and only on intersect (currently assumes perfect accuracy)
+           if (nrow(tri_points) == 0) {
+              
+              ## NO INTERSECTION FOUND 
+              
+              bb_lines <- st_bbox(lines)
+              
+              # add lines and circle to map proxy
+              proxy_map %>%
+                 addPolylines(data = st_as_sf(lines, crs = APP_CRS), group = 'Triangulate',
+                              weight = 1.2,
+                              color = 'darkred') %>%
+                 flyToBounds(bb_lines[['xmin']], bb_lines[['ymin']], bb_lines[['xmax']], bb_lines[['ymax']]) %>%
+                 showGroup('Triangulate')
+              
+              # pan page back to map (effect only noticeable on mobile)
+              runjs('document.getElementById("map").scrollIntoView();')
+              
+              isolate(selected$success <- FALSE)
+              
+              shinyalert("WARNING",
+                         "The supplied towers and bearings do not intersect. Towers may be observing multiple incidents, or the visibility of a tower may need to be extended. Use the red lines on the map as a guide.",
+                         type = 'warning')
+              
+              
+           } else {
+              
+              ## INTERSECTION SUCCESSFULL
+              
+              setProgress(0.7, 'Calculating', 'identify location')
+              
+              if (nrow(tri_points) < nrow(tri_lines)) { # TODO: examine different intersection patterns. Pattern below may not always hold
+                 
+                 radius <- max(st_distance(twrs, cent)) * 0.005
+                 # TODO: make msg dark red
+                 
+                 if (nrow(tri_lines) == 2 & nrow(tri_points) == 1) {
+                    msg <- 'Only 2 towers were selected. Accuracy reflects distance from towers to intersecting point(s)'
+                 } else {
+                    msg <- 'Some lines did not intersect. Accuracy reflects distance from towers to intersecting point(s)'
+                 }
+                 
+                 
+              } else {
+                 
+                 radius <- max(st_distance(tri_points, cent))
+                 msg <- 'All lines intersect.'
+              }
+              
+              
+              circ <- cent %>%
+                 st_transform(3111) %>%
+                 st_buffer(radius * 1.1) %>%
+                 st_transform(APP_CRS)
+              
+              # convert location centre to gda and reverse geocode
+              try({
+                 
+                 export$address <- cent %>%
+                    st_as_sf(crs = APP_CRS) %>%
+                    st_transform(REPORT_CRS) %>%
+                    tmaptools::rev_geocode_OSM(projection = REPORT_CRS)
+                 
+              })
+              
+              if (export$address != '') {
+                 
+                 coord_lab <- st_coordinates(cent)
+                 
+                 label <- glue('{export$address[[1]]$name}<BR>',
+                               "Longitude: {round(coord_lab[1], 8)}<BR>",
+                               "Latitude: {round(coord_lab[2], 8)}<BR>",
+                               "Projection: GDA94<BR>",
+                               "Accuracy: {floor(radius)}m<BR>",
+                               "Message: {msg}")
+              }
+              
+              bb <- round(st_bbox(circ), 2)
+              
+              # add lines and circle to map
+              
+              setProgress(0.9, 'Calculating', 'add to map')
+              
+              add_2_map <- function(map){
+                 map %>%
+                    addPolygons(data = circ, group = 'Smoke Location',
+                                fillColor = 'red', 
+                                weight = 0.5) %>%
+                    addAwesomeMarkers(data = cent, group = 'Smoke Location',
+                                      icon = all_icons['Smoke Location'],
+                                      popup = label) %>%
+                    addPolylines(data = tri_lines, group = 'Triangulate',
+                                 weight = 1.2,
+                                 color = 'darkred') %>%
+                    addCircleMarkers(data = tri_points, group = 'Triangulate',
+                                     radius = 10,
+                                     fillColor = 'green',
+                                     weight = 0.8,
+                                     color = 'darkgrey') %>%
+                    flyToBounds(bb[['xmin']], bb[['ymin']], bb[['xmax']], bb[['ymax']]) %>%
+                    showGroup('Smoke Location')
+              }
+              
+              isolate(export$map <- add_2_map(export$map))
+              
+              add_2_map(proxy_map)
+              
+              
+              # pan page back to map (effect only noticeable on mobile)
+              runjs('document.getElementById("map").scrollIntoView();')
+              
+              
+              
+              
+           }
+           
+        }
+        
+        updateMaterialSwitch(session, 'add_obs', value = FALSE)
+        isolate(selected$success <- TRUE)
+        
+        setProgress(0.1, 'Calculating', 'completed')
+        
+     })
       
    })
    
@@ -575,23 +615,37 @@ server <- function(input, output, session) {
       filename = paste0("smoke_report_", format(Sys.time(), '%Y%m%d_%H%M'), ".html"),
       content = function(file) {
          
-         tempReport <- file.path(tempdir(), "report.Rmd")
-         file.copy("report.Rmd", tempReport, overwrite = TRUE)
-         
-         # Set up parameters to pass to Rmd document
-         params <- list(map = export$map,
-                        towers = export$towers,
-                        address = export$address,
-                        inc_bearings = selected$inc_bearings
-         )
-         
-         rmarkdown::render(tempReport,
-                           'html_document',
-                           output_file = file,
-                           clean = FALSE,
-                           params = params,
-                           envir = new.env(parent = globalenv())
-         )
+         withProgress({
+            
+            setProgress(0.2, 'Download Report', 'prepareing data')
+            
+            tempReport <- file.path(tempdir(), "report.Rmd")
+            file.copy("report.Rmd", tempReport, overwrite = TRUE)
+            
+            # Set up parameters to pass to Rmd document
+            params <- list(map = export$map,
+                           towers = export$towers,
+                           address = export$address,
+                           inc_bearings = selected$inc_bearings,
+                           coords = export$coords,
+                           crs = export$crs
+            )
+            
+            setProgress(0.6, 'Download Report', 'rendering report')
+            
+            rmarkdown::render(tempReport,
+                              rmdformats::html_docco(),
+                              #rmarkdown::pdf_document(),
+                              output_file = file,
+                              clean = TRUE,
+                              params = params,
+                              envir = new.env(parent = globalenv())
+            )
+            
+            setProgress(1, 'Download Report', 'completed')
+            
+         })
+
       }
    )
    
