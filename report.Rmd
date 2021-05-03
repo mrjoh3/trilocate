@@ -1,43 +1,56 @@
 ---
-title: "Smoke Locate"
+title: '<span class="glyphicon glyphicon-fire" aria-hidden="true"></span> &nbsp;&nbsp; Smoke Located'
 output: 
-  html_document:
+  rmdformats::html_docco:
     self_contained: true
+always_allow_html: true
 params:
   map: NA
   towers: NA
   address: NA
   inc_bearings: NA
+  coords: NA
+  crs: NA
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
+library(rmdformats)
 library(leaflet)
 library(leafem)
 library(leaflet.extras)
 library(knitr)
 library(dplyr)
+
+local_time <- Sys.time()
+attr(local_time, 'tzone') <- 'Australia/Melbourne'
 ```
 
-## Smoke Located at:
+<STYLE>
+.page {
+  background: rgb(180,17,30);
+  background: linear-gradient(180deg, rgba(180,17,30,1) 5%, rgba(248,251,251,1) 55%);
+}
+</STYLE>
 
-# `r params$address[[1]]$name`
+## `r params$address[[1]]$name`
 
-There are currently `r length(unique(params$inc_bearings$sourceId))` incidents within 50 km of the `r nrow(params$towers)` towers selected.
+Latitude __`r params$coords$Y`__, Longitude: __`r params$coords$X`__ (CRS: `r params$crs$Name`, EPSG: `r params$crs$epsg`). 
 
-## Map
 
-```{r map, fig.height=6, fig.width=9}
+
+```{r map, fig.height=4.5, fig.width=7.5}
 params$map
 ```
 
-## Observation Locations
+There are currently `r length(unique(params$inc_bearings$sourceId))` incidents within 50 km of the `r nrow(params$towers)` towers selected.
 
+## Observation Locations
 
 ```{r towers}
 kable(params$towers)
 ```
 
 
-### This report was generated on `r format(as.POSIXct(Sys.time(), tz = "Australia/Melbourne"), "%F %R UTC%z")`
+`r shiny::icon('fire', lib = 'glyphicon')` This report was generated: __`r local_time`__
