@@ -2,6 +2,7 @@
 title: '<span class="glyphicon glyphicon-fire" aria-hidden="true"></span> &nbsp;&nbsp; Smoke Located'
 output: 
   rmdformats::html_docco:
+    mathjax: null
     self_contained: true
 always_allow_html: true
 params:

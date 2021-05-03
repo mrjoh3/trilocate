@@ -634,7 +634,10 @@ server <- function(input, output, session) {
             setProgress(0.6, 'Download Report', 'rendering report')
             
             rmarkdown::render(tempReport,
-                              rmdformats::html_docco(),
+                              rmdformats::html_docco(thumbnails = FALSE, 
+                                                     mathjax = NULL, 
+                                                     gallery = FALSE
+                                                     ),
                               #rmarkdown::pdf_document(),
                               output_file = file,
                               clean = TRUE,
