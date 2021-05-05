@@ -6,7 +6,6 @@ library(shinydashboard)
 library(shinythemes)
 library(shinyWidgets)
 library(shinyjs)
-
 library(sf)
 library(geosphere)
 library(leaflet)
@@ -15,7 +14,6 @@ library(leaflet.extras)
 library(glue)
 library(dplyr)
 library(purrr)
-
 library(tmaptools)
 
 source('icon_utils.R')
@@ -201,7 +199,7 @@ server <- function(input, output, session) {
          addLayersControl(
             baseGroups = c("Default", "Vicmap", "Streets", "Aerial"),
             overlayGroups = c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"),
-            options = layersControlOptions(collapsed = FALSE)
+            options = layersControlOptions(collapsed = TRUE)
          ) %>%
          hideGroup(c("Smoke Location", "Triangulate", "TFB Districts", 'Current Incidents', "Burnt Area"))
          
