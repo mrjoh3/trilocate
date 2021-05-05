@@ -148,44 +148,6 @@ server <- function(input, output, session) {
                            coords = NULL,
                            crs = NULL)
    
-   # only show download button after successful calculation
-   observe({
-      if (selected$success){
-         shinyjs::showElement(id = 'download_div')
-      } else {
-         shinyjs::hideElement(id = 'download_div')
-      }
-   })
-   
-   
-   # add new observation points by clicking anywhere on the map
-   observeEvent(input$map_click, {
-      
-      if (input$add_obs) {
-         
-         click <- input$map_click
-         sc <- input$map_shape_click
-         
-         assign('mclk', click, .GlobalEnv)
-         
-         if (!is.null(click) & is.null(sc$group)){
-            
-            id <- as.integer(Sys.time())
-            isolate(selected$towers <- c(selected$towers, id))
-            
-            isolate(tow$ers <- st_sf(type = 'mobile location', 
-                                     id = id, 
-                                     name = 'New Location', 
-                                     geometry = list(st_point(c(click$lng, click$lat))), crs = APP_CRS) %>%
-                       rbind(tow$ers, .))
-            
-         } else {
-            towers
-         }
-      }
-   })
-   
-   
    
    output$map <- renderLeaflet({
 
@@ -252,6 +214,46 @@ server <- function(input, output, session) {
    proxy_map <- leafletProxy('map', session)
    
    
+   # only show download button after successful calculation
+   observe({
+      if (selected$success){
+         shinyjs::showElement(id = 'download_div')
+      } else {
+         shinyjs::hideElement(id = 'download_div')
+      }
+   })
+   
+   
+   # add new observation points by clicking anywhere on the map
+   observeEvent(input$map_click, {
+      
+      if (input$add_obs) {
+         
+         click <- input$map_click
+         sc <- input$map_shape_click
+         
+         assign('mclk', click, .GlobalEnv)
+         
+         if (!is.null(click) & is.null(sc$group)){
+            
+            id <- as.integer(Sys.time())
+            isolate(selected$towers <- c(selected$towers, id))
+            
+            isolate(tow$ers <- st_sf(id = id, 
+                                     type = 'Mobile Location', 
+                                     name = 'New Location', 
+                                     state = NA,
+                                     TFB_DISTRICT = NA,
+                                     geometry = list(st_point(c(click$lng, click$lat))), crs = APP_CRS) %>%
+                       rbind(tow$ers, .))
+            
+         } else {
+            towers
+         }
+      }
+   })
+   
+   
    # when clicking on a tower record the id and calculate bearings to incidents within 50km
    observeEvent(input$map_marker_click, {
 
@@ -259,27 +261,31 @@ server <- function(input, output, session) {
       
       if (!is.null(mclk$id)) {
          
-         isolate(selected$towers <- c(selected$towers, mclk$id))
-         
-         # calculate incident bearings
-         bears <- current_incidents %>%
-            filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = APP_CRS), dist = 50000, sparse = FALSE)) 
-         
-         if (nrow(bears) > 0) {
-            bearing_df <<- tibble(tower_id = mclk$id,
-                                 tower_name = filter(towers, id == mclk$id) %>% pull(name),
-                                 tower_X = mclk$lng,
-                                 tower_Y = mclk$lat,
-                                 sourceId = bears$sourceId,
-                                 sourceTitle = bears$sourceTitle,
-                                 location = bears$location,
-                                 bearing = bearing(c(mclk$lng, mclk$lat), st_coordinates(bears)[,1:2])) %>%
-               mutate(bearing = ifelse(bearing < 0, 360 + bearing, bearing),
-                      bearing = round(bearing, 4)) %>%
-               cbind(st_coordinates(bears))
+         if (!(mclk$id %in% selected$towers)) {
             
-            isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
+            isolate(selected$towers <- c(selected$towers, mclk$id))
+            
+            # calculate incident bearings
+            bears <- current_incidents %>%
+               filter(st_is_within_distance(., st_sfc(st_point(c(mclk$lng, mclk$lat)), crs = APP_CRS), dist = 50000, sparse = FALSE)) 
+            
+            if (nrow(bears) > 0) {
+               bearing_df <- tibble(tower_id = mclk$id,
+                                    tower_name = filter(towers, id == mclk$id) %>% pull(name),
+                                    tower_X = mclk$lng,
+                                    tower_Y = mclk$lat,
+                                    sourceId = bears$sourceId,
+                                    sourceTitle = bears$sourceTitle,
+                                    location = bears$location,
+                                    bearing = bearing(c(mclk$lng, mclk$lat), st_coordinates(bears)[,1:2])) %>%
+                  mutate(bearing = ifelse(bearing < 0, 360 + bearing, bearing),
+                         bearing = round(bearing, 4)) %>%
+                  cbind(st_coordinates(bears))
+               
+               isolate(selected$inc_bearings <- rbind(selected$inc_bearings, bearing_df))
+            }
          }
+
       }
    })
    
