@@ -5,7 +5,6 @@ library(shiny)
 library(shinydashboard)
 library(shinythemes)
 library(shinyWidgets)
-library(shinyalert)
 library(shinyjs)
 
 library(sf)
@@ -76,7 +75,6 @@ ui <- shinyUI(fluidPage(
       theme = shinytheme("superhero"),
       header = NULL,
       useShinydashboard(),
-      shinyalert::useShinyalert(),
       useShinyjs(),
 
       # Application title
@@ -340,9 +338,10 @@ server <- function(input, output, session) {
            
            isolate(selected$success <- FALSE)
            
-           shinyalert("ERROR",
+           show_alert("ERROR",
                       "You need to select more than one tower before a location can be estimated",
-                      type = 'error')
+                      type = 'error',
+                      session = session)
            
            ##TODO:  change this to estimate location based on one tower with bearing and distance
            
@@ -445,9 +444,10 @@ server <- function(input, output, session) {
               
               isolate(selected$success <- FALSE)
               
-              shinyalert("WARNING",
+              show_alert("WARNING",
                          "The supplied towers and bearings do not intersect. Towers may be observing multiple incidents, or the visibility of a tower may need to be extended. Use the red lines on the map as a guide.",
-                         type = 'warning')
+                         type = 'warning',
+                         session = session)
               
               
            } else {
