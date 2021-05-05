@@ -186,7 +186,7 @@ server <- function(input, output, session) {
          addAwesomeMarkers(data = tow$ers, layerId = ~ id, # TODO: responsive value very slow may be better to use observe, remove markers and add again with update
                            label = ~ glue('{name} ({id})'),
                            #popup = ~ glue('{name} ({id})'),
-                           icon = ~ all_icons['Fire Lookout'],
+                           icon = ~ all_icons[type],
                            group = 'Towers') %>%
          leaflet.extras::addSearchFeatures('Towers', options = searchFeaturesOptions(openPopup = TRUE)) %>%
          addMeasure(
