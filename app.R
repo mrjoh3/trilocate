@@ -128,7 +128,9 @@ ui <- shinyUI(fluidPage(
                column(1)),
       fluidRow(tags$hr(),
                div(class = 'pull-right', style = 'padding-right: 20px; padding-bottom: 20px;',
-                   icon('fire', class = 'orange', lib = 'glyphicon'), APP_TITLE)
+                   tags$a(href = 'https://www.glyphicons.com/', 
+                          icon('fire', class = 'orange', lib = 'glyphicon')), 
+                   APP_TITLE)
       )
   )
 )
@@ -320,9 +322,17 @@ server <- function(input, output, session) {
                name <- r[['name']]
                
                column(12 / length(selected$towers),
-                      h3(name),
-                      numericInput(glue('bearing_{tower_id}'), label = 'Bearing', value = NULL),
-                      sliderInput(glue('vis_{tower_id}'), label = 'Visibility (km)', min = 0, max = 100, step = 10, value = 50), 
+                      div(style = 'display: flex; justify-content: center;',
+                         div(h3(name),
+                             numericInput(glue('bearing_{tower_id}'), 
+                                          label = 'Bearing', 
+                                          value = NULL),
+                             sliderInput(glue('vis_{tower_id}'), 
+                                         label = 'Visibility (km)', 
+                                         min = 0, max = 100, 
+                                         step = 10, 
+                                         value = 50))
+                         ), 
                       tags$hr()
                       )
             }))
