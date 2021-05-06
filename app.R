@@ -116,21 +116,29 @@ ui <- shinyUI(fluidPage(
                                           size = 'md',
                                           color = 'success'))
                       )),
-      fluidRow(column(3,
+      fluidRow(column(2),
+               column(3,
                       div(style = 'display: flex; justify-content: center;',
                           HTML(markerLegendHTML(all_icons)))),
-               column(4,
-                      includeMarkdown('instructions.md')
-                      ),
-               column(4,
-                      includeMarkdown('about.md')
-                      ),
-               column(1)),
+               column(5,
+                      tabsetPanel(
+                         tabPanel('Instructions',
+                                  includeMarkdown('md/instructions.md')),
+                         tabPanel('About',
+                                  includeMarkdown('md/about.md')),
+                         tabPanel('Data',
+                                  includeMarkdown('md/data_sources.md'))
+                      )),
+               column(2)),
       fluidRow(tags$hr(),
-               div(class = 'pull-right', style = 'padding-right: 20px; padding-bottom: 20px;',
-                   tags$a(href = 'https://www.glyphicons.com/', 
-                          icon('fire', class = 'orange', lib = 'glyphicon')), 
-                   APP_TITLE)
+               column(9,
+                      includeMarkdown('md/improve.md')),
+               column(3,
+                      div(class = 'pull-right', style = 'padding-right: 20px; padding-bottom: 20px;',
+                          tags$a(href = 'https://www.glyphicons.com/', 
+                                 icon('fire', class = 'orange', lib = 'glyphicon')), 
+                          APP_TITLE))
+               
       )
   )
 )
