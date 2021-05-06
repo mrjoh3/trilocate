@@ -17,6 +17,8 @@ This application is intended to replicate and simplify the manual
 triangulation process, while at the same time incorporate modern 
 reverse geocoding capabilities that can convert a location into an address.
 
+Smoke Locate is intended to be as simple to use as possible and is designed to be 
+usable on small screens, such as phones and tablets, that may be in field operation.
 
 ## Data Sources
 
