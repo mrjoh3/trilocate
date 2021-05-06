@@ -516,7 +516,7 @@ server <- function(input, output, session) {
                                "Message: {msg}")
               }
               
-              bb <- round(st_bbox(circ), 2)
+              bb <- st_bbox(st_buffer(circ, 0.05)) # add buffer to control zoom level
               
               # add lines and circle to map
               
