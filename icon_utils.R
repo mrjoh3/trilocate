@@ -14,7 +14,7 @@ all_icons <- awesomeIconList(
 markerLegendHTML <- function(IconSet) {
   
   # container div:
-  legendHtml <- "<div style='padding: 10px; padding-bottom: 10px;'><h2 style='padding-top:0; padding-bottom:10px; margin-top: 11px;'> Map Legend </h2>"
+  legendHtml <- "<div style='padding: 10px; padding-bottom: 10px;'><h3 style='padding-top:0; padding-bottom:10px; margin-top: 11px;'> Map Legend </h2>"
   
   n <- 1
   # add each icon for font-awesome icons icons:
