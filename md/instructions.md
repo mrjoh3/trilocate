@@ -1,7 +1,5 @@
 
 
-## Instructions
-
 #### Step 1: 
 Locate the towers that have observed a smoke column. You can zoom into the 
 area or use the search  <i class="fas fa-search"></i> option in the top left 
