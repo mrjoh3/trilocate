@@ -22,5 +22,3 @@ the location of the smoke.
 While this project is made for the state of Victoria in Australia, it can be modified for any area. If you have 
 network of towers or observation points in your area this application can be modified to suite. 
 
-Comments in the code indicate which components are specific to Victoria and which are essential for the app
-to work.
